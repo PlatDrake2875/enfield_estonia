@@ -82,133 +82,183 @@ def prepare_data():
     print("Data preparation complete.")
     return elec, weather, areas
 
-def create_features(df_elec_single_building, df_weather_full, target_building_name, area_map_dict, lookback_hours=[1, 2, 3, 23, 24, 25, 47, 48, 49, 167, 168, 169]):
+def create_features(df_elec_single_building, df_weather_full, target_building_name, area_map_dict, 
+                    lookback_hours=None, # Made it an argument
+                    rolling_windows=None # Made it an argument
+                    ):
     """Creates features for XGBoost model for a single target building."""
     print(f"Creating features for {target_building_name}...")
+
+    if lookback_hours is None:
+        lookback_hours = [1, 2, 3, 4, 5, 6, 12, 23, 24, 25, 47, 48, 49, 71, 72, 73, 167, 168, 169, 335, 336, 337] # Extended
+    if rolling_windows is None:
+        rolling_windows = [3, 6, 12, 24, 48, 168]
     
     data_feat = df_elec_single_building[[target_building_name]].copy()
     data_feat = data_feat.join(df_weather_full, how='left') 
 
+    # --- 1. Phenomena Text Processing (Binary Flags) ---
     if 'phenomena_text' in data_feat.columns:
         phenomena_text_series = data_feat['phenomena_text'].astype(str).fillna('').str.lower()
-        
         phenomena_keywords = {
             'is_snow': ['snow', 'snowfall'], 'is_rain': ['rain', 'drizzle'],
             'is_fog': ['fog'], 'is_mist': ['mist'], 'is_shower': ['shower'],
             'is_drifting': ['drifting'], 'is_freezing_precip': ['freezing', 'supercooled'],
             'is_grains': ['grains'] 
         }
-        
         for feature_name, keywords_list in phenomena_keywords.items():
             pattern = r'\b(?:' + '|'.join(keywords_list) + r')\b'
             data_feat[feature_name] = phenomena_text_series.str.contains(pattern, regex=True, case=False).astype(int)
-        print(f"  Created binary features from 'phenomena_text' for {target_building_name}.")
+        print(f"  Created binary features from 'phenomena_text'.")
     else:
-        print(f"  Warning: 'phenomena_text' column not found in weather data for {target_building_name}. Skipping phenomena features.")
+        print(f"  Warning: 'phenomena_text' column not found. Skipping phenomena features.")
 
+    # --- 2. Target Lagged Features ---
+    print(f"  Creating target lags for {target_building_name}...")
     for lag in lookback_hours:
         data_feat[f'{target_building_name}_lag_{lag}h'] = data_feat[target_building_name].shift(lag)
     
-    windows = [3, 6, 12, 24, 48, 168] 
-    for window in windows:
-        data_feat[f'{target_building_name}_roll_mean_{window}h'] = data_feat[target_building_name].rolling(window=window, min_periods=1).mean().shift(1)
-        data_feat[f'{target_building_name}_roll_std_{window}h'] = data_feat[target_building_name].rolling(window=window, min_periods=1).std().shift(1)
+    # --- 3. Target Rolling Window Features ---
+    print(f"  Creating target rolling window features for {target_building_name}...")
+    for window in rolling_windows:
+        shifted_target = data_feat[target_building_name].shift(1) # Shift first to avoid leakage
+        data_feat[f'{target_building_name}_roll_mean_{window}h'] = shifted_target.rolling(window=window, min_periods=1).mean()
+        data_feat[f'{target_building_name}_roll_std_{window}h'] = shifted_target.rolling(window=window, min_periods=1).std()
+        data_feat[f'{target_building_name}_roll_min_{window}h'] = shifted_target.rolling(window=window, min_periods=1).min()
+        data_feat[f'{target_building_name}_roll_max_{window}h'] = shifted_target.rolling(window=window, min_periods=1).max()
+        data_feat[f'{target_building_name}_roll_median_{window}h'] = shifted_target.rolling(window=window, min_periods=1).median()
 
-    # Time-based features
-    data_feat['hour'] = data_feat.index.hour
-    data_feat['dayofweek'] = data_feat.index.dayofweek 
-    data_feat['dayofyear'] = data_feat.index.dayofyear
-    data_feat['year'] = data_feat.index.year 
-    # --- OMITTED FEATURES ---
-    # data_feat['month'] = data_feat.index.month # Omitted
-    # data_feat['weekofyear'] = data_feat.index.isocalendar().week.astype(int) # Omitted
-    # data_feat['quarter'] = data_feat.index.quarter # Omitted
-    # --- END OMITTED FEATURES ---
+    # --- 4. Time-Based Features (Raw and Cyclical) ---
+    print(f"  Creating time-based features...")
+    idx = data_feat.index
+    data_feat['hour'] = idx.hour
+    data_feat['dayofweek'] = idx.dayofweek # Monday=0, Sunday=6
+    data_feat['dayofyear'] = idx.dayofyear
+    data_feat['year'] = idx.year 
+    # Omitted month, quarter, weekofyear as per previous request for XGBoost.
 
-    data_feat['hour_x_dayofweek'] = data_feat['hour'] * data_feat['dayofweek']
+    # Cyclical features
+    data_feat['hour_sin'] = np.sin(2 * np.pi * data_feat['hour'] / 24.0)
+    data_feat['hour_cos'] = np.cos(2 * np.pi * data_feat['hour'] / 24.0)
+    data_feat['dayofweek_sin'] = np.sin(2 * np.pi * data_feat['dayofweek'] / 7.0)
+    data_feat['dayofweek_cos'] = np.cos(2 * np.pi * data_feat['dayofweek'] / 7.0)
+    data_feat['dayofyear_sin'] = np.sin(2 * np.pi * data_feat['dayofyear'] / 365.25)
+    data_feat['dayofyear_cos'] = np.cos(2 * np.pi * data_feat['dayofyear'] / 365.25)
     
+    # --- 5. Weather Features (Direct, Lags, Rolling) ---
+    print(f"  Creating weather-based features...")
+    # Identify temperature column (case-insensitive)
     temp_col_found = None
     possible_temp_cols = ['Temperature', 'temp', 'air_temp', 'temperature', 'Air temperature', 'T', 'tt'] 
-    for col_name in possible_temp_cols:
-        matching_cols = [col for col in data_feat.columns if col.strip().lower() == col_name.strip().lower()]
-        if matching_cols:
-            temp_col_found = matching_cols[0] 
+    for col_name_df in data_feat.columns: # Iterate over actual columns in data_feat
+        for p_name in possible_temp_cols:
+            if col_name_df.strip().lower() == p_name.strip().lower():
+                temp_col_found = col_name_df
+                break
+        if temp_col_found:
             break
             
+    weather_features_to_roll = []
+    if temp_col_found:
+        weather_features_to_roll.append(temp_col_found)
+        print(f"    Identified temperature column: '{temp_col_found}'")
+    else:
+        print(f"    Warning: No standard temperature column found for rolling features.")
+    
+    if 'cloud_cover_percentage' in data_feat.columns:
+        weather_features_to_roll.append('cloud_cover_percentage')
+    if 'visibility' in data_feat.columns: # Assuming 'visibility' is a numeric column from cleaning
+        weather_features_to_roll.append('visibility')
+    # Add 'Relative humidity (%)' if consistently available and named
+    rh_col_found = next((col for col in data_feat.columns if 'relative humidity' in col.lower()), None)
+    if rh_col_found:
+        weather_features_to_roll.append(rh_col_found)
+        print(f"    Identified humidity column: '{rh_col_found}'")
+
+
+    weather_rolling_windows = [3, 6, 12, 24] # Shorter windows for weather
+    weather_lags = [1, 2, 3, 24]
+
+    for w_feat in weather_features_to_roll:
+        if w_feat in data_feat.columns:
+            # Weather Lags
+            for lag in weather_lags:
+                data_feat[f'{w_feat}_lag_{lag}h'] = data_feat[w_feat].shift(lag)
+            # Weather Rolling Windows (shifted by 1)
+            shifted_w_feat = data_feat[w_feat].shift(1)
+            for window in weather_rolling_windows:
+                data_feat[f'{w_feat}_roll_mean_{window}h'] = shifted_w_feat.rolling(window=window, min_periods=1).mean()
+                data_feat[f'{w_feat}_roll_std_{window}h'] = shifted_w_feat.rolling(window=window, min_periods=1).std()
+        else:
+            print(f"    Warning: Column '{w_feat}' not found for weather rolling features/lags.")
+
+
+    # --- 6. Interaction Features ---
+    data_feat['hour_x_dayofweek'] = data_feat['hour'] * data_feat['dayofweek'] # Already present, kept for example
     if temp_col_found:
          data_feat['temp_x_hour'] = data_feat[temp_col_found] * data_feat['hour']
-         print(f"  Used '{temp_col_found}' for temperature interaction feature in {target_building_name}.")
-    else:
-        print(f"  Warning: No standard temperature column found for interaction feature in {target_building_name}.")
+         print(f"    Created '{temp_col_found}_x_hour' interaction feature.")
 
+    # --- 7. Building Size ---
     if target_building_name in area_map_dict:
         data_feat[f'building_size_m2'] = area_map_dict[target_building_name]
     else:
         data_feat[f'building_size_m2'] = np.nan 
     
+    # --- Finalize Feature List & Clean up ---
     cols_to_exclude_as_features = [target_building_name, 'phenomena_text'] 
     original_cloud_col_name_check = next((c for c in data_feat.columns if 'total cloud cover' in c.lower() or c.lower() == 'c'), None)
     if original_cloud_col_name_check:
-        if original_cloud_col_name_check != 'cloud_cover_percentage':
+        if original_cloud_col_name_check != 'cloud_cover_percentage': # Avoid dropping the numeric one
             cols_to_exclude_as_features.append(original_cloud_col_name_check)
         
     feature_columns = [col for col in data_feat.columns if col not in cols_to_exclude_as_features]
     
+    # Ensure all feature columns are numeric
     for col in feature_columns:
         if data_feat[col].dtype == 'object':
             print(f"  Warning: Feature column '{col}' is of object type. Attempting to convert to numeric.")
             data_feat[col] = pd.to_numeric(data_feat[col], errors='coerce')
 
-    data_feat = data_feat.dropna(subset=[target_building_name]) 
+    data_feat = data_feat.dropna(subset=[target_building_name]) # Drop rows where target is NaN after all features created
     
-    print(f"Features created for {target_building_name}. Shape: {data_feat.shape}")
+    print(f"Features created for {target_building_name}. Final shape: {data_feat.shape}, Number of features: {len(feature_columns)}")
     return data_feat, feature_columns
 
 if __name__ == '__main__':
-    # ... (if __name__ == '__main__' block remains the same) ...
     print("Testing xgboost_data_preparer.py (now in models/xgboost/)...")
+    # ... (Keep the test block, it will now test the new features) ...
     try:
         elec_df, weather_df, areas_df = prepare_data()
         print("\nElectricity data sample:\n", elec_df.head())
-        print("\nWeather data sample (should include new features like 'cloud_cover_percentage', 'phenomena_text', 'atm_pressure_sea_level'):\n", weather_df.head())
-        if 'phenomena_text' in weather_df.columns:
-            print("\nSample of 'phenomena_text':\n", weather_df['phenomena_text'].dropna().unique()[:10]) 
-        if 'cloud_cover_percentage' in weather_df.columns:
-            print("\nSample of 'cloud_cover_percentage':\n", weather_df['cloud_cover_percentage'].value_counts(dropna=False))
-        if 'atm_pressure_sea_level' in weather_df.columns: # This should no longer exist if dropped correctly
-            print("\nSample of 'atm_pressure_sea_level':\n", weather_df['atm_pressure_sea_level'].describe())
-        else:
-            print("\n'atm_pressure_sea_level' column correctly omitted from weather_df.")
-
-
-        print("\nAreas data sample:\n", areas_df.head())
-
-        if not elec_df.empty:
+        print("\nWeather data sample:\n", weather_df.head())
+        
+        if not elec_df.empty and not weather_df.empty:
             building_cols_test = [col for col in elec_df.columns if col not in ['time_iso', 'Datetime']]
             if building_cols_test:
                 test_bldg = building_cols_test[0]
                 area_map_test = areas_df.set_index('Buid_ID')['Area [m2]'].to_dict()
                 
-                features_df, feature_list = create_features(elec_df[[test_bldg]], weather_df, test_bldg, area_map_test)
-                print(f"\nFeatures for {test_bldg} sample:\n", features_df.head())
+                features_df, feature_list = create_features(elec_df[[test_bldg]], weather_df.copy(), test_bldg, area_map_test)
+                print(f"\nFeatures for {test_bldg} sample (first 5 rows, 10 cols):\n", features_df.iloc[:5, :10])
                 print(f"\nFeature list for {test_bldg} (first 10):", feature_list[:10])
                 print(f"\nTotal features for {test_bldg}: {len(feature_list)}")
+                
+                print("\nChecking for new feature types:")
+                for new_feat_type in ['_roll_min', '_roll_max', '_roll_median', '_sin', '_cos', '_lag_1h', '_roll_mean_3h']:
+                    if any(new_feat_type in f_name for f_name in feature_list):
+                        print(f"  Found features of type: {new_feat_type}")
+                
                 omitted_date_features = ['month', 'quarter', 'weekofyear']
                 for feat in omitted_date_features:
-                    if feat in features_df.columns:
-                        print(f"ERROR: Feature '{feat}' was NOT omitted.")
+                    if feat in features_df.columns or feat in feature_list :
+                        print(f"  ERROR: Feature '{feat}' was NOT omitted.")
                     else:
-                        print(f"Correct: Feature '{feat}' was omitted.")
-
-                phenomena_related_features = [col for col in features_df.columns if col.startswith('is_')]
-                if phenomena_related_features:
-                    print(f"\nBinary phenomena features created for {test_bldg}:\n", features_df[phenomena_related_features].head())
-                else:
-                    print(f"\nNo binary phenomena features found for {test_bldg} in the sample output.")
+                        print(f"  Correct: Feature '{feat}' was omitted.")
             else:
                 print("No building columns in electricity data to test feature creation.")
         else:
-            print("Electricity data is empty, cannot test feature creation.")
+            print("Electricity or weather data is empty, cannot test feature creation.")
 
     except Exception as e:
         print(f"Error during testing: {e}")

@@ -1,16 +1,70 @@
 ,TARGET
 building_size_m2,0.8043573587517145
+dayofweek_sin,0.1237350416251462
 hour,0.08541131609114753
 temp_x_hour,0.0699594178115323
 air temperature,0.056331510967005775
+air temperature_lag_24h,0.0523117759232166
 Mean wind speed,0.05164567416743873
+air temperature_lag_1h,0.049827652544928054
+air temperature_lag_2h,0.041007865012060954
+air temperature_roll_mean_3h,0.04061119191263813
+air temperature_roll_std_6h,0.03727092051299646
+air temperature_roll_std_12h,0.035977240138741214
+air temperature_roll_std_3h,0.031256736403669216
+air temperature_lag_3h,0.03065091260746111
+Relative humidity (%)_roll_mean_12h,0.02568143966813653
+air temperature_roll_mean_6h,0.024796875351693885
 dayofyear,0.022983676926420653
+Relative humidity (%)_roll_std_3h,0.021923664191908457
+Relative humidity (%)_roll_std_6h,0.02146448050429576
+visibility_lag_24h,0.01942909204141124
+air temperature_roll_std_24h,0.01686535832462729
+air temperature_roll_mean_24h,0.016338219799484598
 visibility,0.015040277861123384
+visibility_roll_std_12h,0.012392874712906128
+visibility_lag_1h,0.010697556193503504
+Relative humidity (%)_roll_std_24h,0.010402864974622826
+Relative humidity (%)_roll_std_12h,0.009395199583461872
+visibility_roll_std_6h,0.00914297945046213
 Atm pressure mm of mercury,0.007408224907176477
+visibility_roll_mean_3h,0.006233007503452714
+visibility_lag_2h,0.005844145926618222
+visibility_roll_std_3h,0.0035703680129624783
+cloud_cover_percentage_roll_std_3h,0.003506911220547537
+air temperature_roll_mean_12h,0.0015184197794013007
+visibility_lag_3h,0.0008100587540826643
+visibility_roll_mean_24h,0.0006925975133430634
+cloud_cover_percentage_lag_1h,-0.0007269208436822885
+cloud_cover_percentage_lag_2h,-0.0009111891560229108
+cloud_cover_percentage_roll_mean_3h,-0.00115391613124343
 cloud_cover_percentage,-0.001161689361273288
+cloud_cover_percentage_roll_std_6h,-0.0014451537358490848
+visibility_roll_mean_6h,-0.0015832552735568458
+cloud_cover_percentage_lag_3h,-0.0016090205512832416
+cloud_cover_percentage_lag_24h,-0.0017830110918077454
+cloud_cover_percentage_roll_mean_6h,-0.002973135826427236
+visibility_roll_std_24h,-0.005308406674797766
+dayofyear_cos,-0.007479078047872984
+cloud_cover_percentage_roll_mean_12h,-0.008468886598951241
+cloud_cover_percentage_roll_std_24h,-0.010077569424920479
+cloud_cover_percentage_roll_mean_24h,-0.010179524512117536
+cloud_cover_percentage_roll_std_12h,-0.010815582726519394
+visibility_roll_mean_12h,-0.012135872828175732
+Relative humidity (%)_roll_mean_24h,-0.012482498121121066
+dayofyear_sin,-0.017435414404022413
+dayofweek_cos,-0.023498993695941484
+Relative humidity (%)_roll_mean_6h,-0.02509344825101257
+Relative humidity (%)_lag_3h,-0.036056531574877655
 hour_x_dayofweek,-0.044868253949172106
+Relative humidity (%)_lag_2h,-0.05707266919632204
+Relative humidity (%)_roll_mean_3h,-0.0571738854687984
+Relative humidity (%)_lag_1h,-0.07502947657415532
+hour_sin,-0.0818240385795025
 Relative humidity (%),-0.08847710307942962
+Relative humidity (%)_lag_24h,-0.08924127155366521
 dayofweek,-0.12431376680787393
+hour_cos,-0.23196672741111274
 Mean wind direction,
 Unnamed: 9,
 is_drifting,

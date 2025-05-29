@@ -172,7 +172,7 @@ def run_cross_validation_fold(
         'objective': 'reg:squarederror', 
         'eval_metric': 'rmse', 
         'eta': 0.03, 
-        'max_depth': 7,
+        'max_depth': 12,
         'subsample': 0.8,
         'colsample_bytree': 0.8,
         'seed': 42,
