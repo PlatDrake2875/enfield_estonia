@@ -13,6 +13,7 @@ air temperature_roll_std_6h,0.03727092051299646
 air temperature_roll_std_12h,0.035977240138741214
 air temperature_roll_std_3h,0.031256736403669216
 air temperature_lag_3h,0.03065091260746111
+season_Autumn,0.026475532036739528
 Relative humidity (%)_roll_mean_12h,0.02568143966813653
 air temperature_roll_mean_6h,0.024796875351693885
 dayofyear,0.022983676926420653
@@ -32,6 +33,7 @@ visibility_roll_mean_3h,0.006233007503452714
 visibility_lag_2h,0.005844145926618222
 visibility_roll_std_3h,0.0035703680129624783
 cloud_cover_percentage_roll_std_3h,0.003506911220547537
+season_Spring,0.0017598981479178969
 air temperature_roll_mean_12h,0.0015184197794013007
 visibility_lag_3h,0.0008100587540826643
 visibility_roll_mean_24h,0.0006925975133430634
@@ -42,6 +44,7 @@ cloud_cover_percentage,-0.001161689361273288
 cloud_cover_percentage_roll_std_6h,-0.0014451537358490848
 visibility_roll_mean_6h,-0.0015832552735568458
 cloud_cover_percentage_lag_3h,-0.0016090205512832416
+season_Summer,-0.0016710548704046832
 cloud_cover_percentage_lag_24h,-0.0017830110918077454
 cloud_cover_percentage_roll_mean_6h,-0.002973135826427236
 visibility_roll_std_24h,-0.005308406674797766
@@ -55,6 +58,7 @@ Relative humidity (%)_roll_mean_24h,-0.012482498121121066
 dayofyear_sin,-0.017435414404022413
 dayofweek_cos,-0.023498993695941484
 Relative humidity (%)_roll_mean_6h,-0.02509344825101257
+season_Winter,-0.026047895296324057
 Relative humidity (%)_lag_3h,-0.036056531574877655
 hour_x_dayofweek,-0.044868253949172106
 Relative humidity (%)_lag_2h,-0.05707266919632204
@@ -64,6 +68,7 @@ hour_sin,-0.0818240385795025
 Relative humidity (%),-0.08847710307942962
 Relative humidity (%)_lag_24h,-0.08924127155366521
 dayofweek,-0.12431376680787393
+is_weekend,-0.1448752320531034
 hour_cos,-0.23196672741111274
 Mean wind direction,
 Unnamed: 9,

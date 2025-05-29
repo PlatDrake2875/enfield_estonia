@@ -1,4 +1,4 @@
-# models/xgboost_trainer.py
+# models/xgboost/xgboost_trainer.py
 
 import pandas as pd
 import numpy as np
@@ -6,13 +6,24 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_percentage_error
 import matplotlib.pyplot as plt
+import math
 import seaborn as sns
 import os
 
 # Import from sibling module
 from .xgboost_data_preparer import create_features 
 
-FIGURE_DPI = 300 # Defined here for plots generated within this module
+# --- NEW IMPORT for TensorBoard ---
+try:
+    from xgboost.callback import TensorBoard
+    TENSORBOARD_AVAILABLE = True
+except ImportError:
+    print("Warning: xgboost.callback.TensorBoard could not be imported. TensorBoard logging will be disabled. Ensure TensorFlow is installed if you want TensorBoard logging.")
+    TENSORBOARD_AVAILABLE = False
+# --- END NEW IMPORT ---
+
+
+FIGURE_DPI = 300 
 
 def hackathon_split(data_with_features, target_building_col, train_months=2):
     """Splits data for the hackathon scenario (2 months train, rest test for the held-out building)."""
@@ -114,10 +125,9 @@ def run_cross_validation_fold(
         print(f"  Training or Test data is empty for {held_out_building_name} before XGBoost. Skipping fold.")
         return None
 
-    # --- Correlation Analysis for this fold ---
+    # Correlation Analysis (remains the same)
     print(f"  Performing correlation analysis for fold: {held_out_building_name}")
     if not X_train_final.empty:
-        # Feature-Feature Correlation
         corr_matrix = X_train_final.corr()
         corr_matrix_filename = os.path.join(output_paths['correlation_data_dir'], f"feature_correlation_matrix_{held_out_building_name}.csv")
         corr_matrix.to_csv(corr_matrix_filename)
@@ -133,7 +143,6 @@ def run_cross_validation_fold(
         print(f"    Feature correlation heatmap saved to {heatmap_filename}")
         plt.close(fig_corr)
 
-        # Feature-Target Correlation
         combined_train_df_for_corr = X_train_final.copy()
         combined_train_df_for_corr['TARGET'] = y_train_final.values 
         
@@ -154,10 +163,9 @@ def run_cross_validation_fold(
             plt.close(fig_target_corr)
         else:
             print("    Could not compute feature-target correlation: 'TARGET' column missing after merge.")
-    # --- End Correlation Analysis ---
 
     X_train_xgb, X_val_xgb, y_train_xgb, y_val_xgb = train_test_split(
-        X_train_final, y_train_final, test_size=0.1, random_state=42, shuffle=False 
+        X_train_final, y_train_final, test_size=0.2, random_state=42, shuffle=False 
     )
 
     print(f"  Final Train shapes for XGB: X={X_train_xgb.shape}, y={y_train_xgb.shape}")
@@ -172,7 +180,7 @@ def run_cross_validation_fold(
         'objective': 'reg:squarederror', 
         'eval_metric': 'rmse', 
         'eta': 0.03, 
-        'max_depth': 12,
+        'max_depth': ,
         'subsample': 0.8,
         'colsample_bytree': 0.8,
         'seed': 42,
@@ -180,14 +188,31 @@ def run_cross_validation_fold(
 
     print(f"  Training XGBoost for held-out building: {held_out_building_name}...")
     evals_result_xgb = {} 
+    
+    # --- TENSORBOARD INTEGRATION ---
+    training_callbacks = []
+    if TENSORBOARD_AVAILABLE:
+        # Sanitize building name for directory
+        safe_building_name = "".join(c if c.isalnum() else "_" for c in held_out_building_name)
+        log_dir = os.path.join(output_paths['tensorboard_logs_dir'], f"fold_{safe_building_name}")
+        os.makedirs(log_dir, exist_ok=True) # Ensure specific fold log dir exists
+        
+        # The TensorBoard callback needs a unique log_dir for each run/fold.
+        # It will create subdirectories for train and eval within this log_dir.
+        tensorboard_callback = TensorBoard(log_dir=log_dir, name=f"XGBoost_{safe_building_name}")
+        training_callbacks.append(tensorboard_callback)
+        print(f"    TensorBoard logging enabled. Logs will be saved to: {log_dir}")
+    # --- END TENSORBOARD INTEGRATION ---
+
     model_xgb = xgb.train(
         params_xgb,
         dtrain_xgb,
         num_boost_round=1000, 
         evals=[(dtrain_xgb, 'train'), (dval_xgb, 'eval')],
         evals_result=evals_result_xgb, 
-        early_stopping_rounds=30, 
+        early_stopping_rounds=100, 
         verbose_eval=100, 
+        callbacks=training_callbacks # Add callbacks list here
     )
     
     predictions_xgb = model_xgb.predict(dtest_xgb)
@@ -210,10 +235,10 @@ def run_cross_validation_fold(
                                             for imp_type, scores_dict in fold_importance_scores.items() 
                                             for feat, score in scores_dict.items()},
                                            orient='index', columns=['score'])
-    importance_df.index = pd.MultiIndex.from_tuples(importance_df.index, names=['importance_type', 'feature'])
-    importance_df = importance_df.unstack(level='importance_type').fillna(0)
-    if not importance_df.empty: 
-         if 'score' in importance_df.columns: 
+    if not importance_df.empty: # Check before trying to operate on index/columns
+        importance_df.index = pd.MultiIndex.from_tuples(importance_df.index, names=['importance_type', 'feature'])
+        importance_df = importance_df.unstack(level='importance_type').fillna(0)
+        if 'score' in importance_df.columns: 
             importance_df.columns = importance_df.columns.droplevel(0) 
     
     importance_filename = os.path.join(output_paths['importance_data_dir'], f"feature_importance_scores_{held_out_building_name}.csv")

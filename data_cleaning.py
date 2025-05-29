@@ -1,7 +1,7 @@
 # data_cleaning.py (Main Orchestrator)
 # Uses preprocessor classes to clean data and save to CSVs.
 
-import pandas as pd # Keep for type hinting if needed, or remove if not used directly
+import pandas as pd 
 import os
 
 # Import the cleaner classes from the data_preprocessors package
@@ -12,6 +12,7 @@ from data_preprocessors.areas_cleaner import AreasCleaner
 # Define the names of the input Excel file
 INPUT_XLSX = 'Buildings_el.xlsx' # Assumed to be in the same directory as this script
 
+# --- THESE CONSTANTS MUST BE DEFINED HERE ---
 # Define the output directory for cleaned CSV files
 DATA_OUTPUT_DIR = 'data' # Will be created if it doesn't exist
 
@@ -19,6 +20,7 @@ DATA_OUTPUT_DIR = 'data' # Will be created if it doesn't exist
 OUTPUT_ELECTRICITY_FILENAME = 'cleaned_electricity.csv'
 OUTPUT_WEATHER_FILENAME = 'cleaned_weather.csv'
 OUTPUT_AREAS_FILENAME = 'cleaned_areas.csv'
+# --- END CONSTANTS DEFINITION ---
 
 # Sheet names (as expected in the input Excel file)
 ELECTRICITY_SHEET = 'Electricity kWh'
@@ -27,7 +29,6 @@ AREAS_SHEET = 'Areas'
 
 def create_output_data_dir():
     """Creates the output data directory if it doesn't exist."""
-    # This function is now also present in the main data_cleaning.py for saving
     if not os.path.exists(DATA_OUTPUT_DIR):
         os.makedirs(DATA_OUTPUT_DIR)
         print(f"Created output directory: '{DATA_OUTPUT_DIR}'")
@@ -36,7 +37,7 @@ def create_output_data_dir():
 
 def save_cleaned_data_to_csv(elec_df, weather_df, areas_df):
     """Saves the cleaned dataframes to separate CSV files in the DATA_OUTPUT_DIR."""
-    create_output_data_dir() # Ensure directory exists
+    create_output_data_dir() 
 
     if elec_df is not None:
         output_path = os.path.join(DATA_OUTPUT_DIR, OUTPUT_ELECTRICITY_FILENAME)
@@ -58,7 +59,6 @@ def save_cleaned_data_to_csv(elec_df, weather_df, areas_df):
                 weather_df_to_save = weather_df_to_save.drop(columns=['Datetime'], errors='ignore')
             if 'time_iso' in weather_df_to_save.columns:
                 cols = ['time_iso'] + [col for col in weather_df_to_save.columns if col != 'time_iso']
-                # Ensure all columns in 'cols' exist in 'weather_df_to_save' before reordering
                 cols = [c for c in cols if c in weather_df_to_save.columns]
                 weather_df_to_save = weather_df_to_save[cols]
             
