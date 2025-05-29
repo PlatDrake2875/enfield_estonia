@@ -1,15 +1,14 @@
-# models/xgboost_pipeline.py
+# models/xgboost/xgboost_pipeline.py
 
 import os
 import json 
 
 # Import from sibling modules
-from .xgboost_data_preparer import prepare_data
+from .xgboost_data_preparer import prepare_data, create_features # create_features is now imported here
 from .xgboost_trainer import run_cross_validation_fold 
 from .xgboost_evaluator import plot_overall_xgboost_results, save_summary_stats
 
 # Define output directories for XGBoost results
-# These will be passed to trainer and evaluator functions
 BASE_RESULTS_DIR = "results" 
 XGBOOST_RESULTS_DIR = os.path.join(BASE_RESULTS_DIR, "xgboost_results")
 XGBOOST_PLOTS_BASE_DIR = os.path.join(XGBOOST_RESULTS_DIR, "plots")
@@ -24,7 +23,14 @@ XGBOOST_IMPORTANCE_PLOTS_DIR = os.path.join(XGBOOST_PLOTS_BASE_DIR, "feature_imp
 # Specific subdirectories for data
 XGBOOST_CORRELATION_DATA_DIR = os.path.join(XGBOOST_DATA_DIR, "correlations") 
 XGBOOST_IMPORTANCE_DATA_DIR = os.path.join(XGBOOST_DATA_DIR, "feature_importance") 
-XGBOOST_PREDICTIONS_DATA_DIR = os.path.join(XGBOOST_DATA_DIR, "predictions")
+XGBOOST_PREDICTIONS_DATA_DIR = os.path.join(XGBOOST_DATA_DIR, "predictions") 
+
+XGBOOST_TENSORBOARD_LOGS_DIR = os.path.join(XGBOOST_RESULTS_DIR, "tensorboard_logs")
+
+# --- NEW: Feature Cache Directory ---
+XGBOOST_FEATURE_CACHE_DIR = os.path.join(XGBOOST_RESULTS_DIR, "feature_cache")
+# --- END NEW ---
+
 
 def ensure_all_output_dirs():
     """Ensures all necessary output directories for the XGBoost pipeline exist."""
@@ -32,17 +38,18 @@ def ensure_all_output_dirs():
         XGBOOST_PLOTS_BASE_DIR, XGBOOST_FEATURE_CORRELATION_PLOTS_DIR,
         XGBOOST_FEATURE_TARGET_CORRELATION_PLOTS_DIR, XGBOOST_PREDICTION_PLOTS_DIR,
         XGBOOST_IMPORTANCE_PLOTS_DIR, XGBOOST_DATA_DIR, XGBOOST_CORRELATION_DATA_DIR,
-        XGBOOST_IMPORTANCE_DATA_DIR, XGBOOST_PREDICTIONS_DATA_DIR
+        XGBOOST_IMPORTANCE_DATA_DIR, XGBOOST_PREDICTIONS_DATA_DIR,
+        XGBOOST_TENSORBOARD_LOGS_DIR,
+        XGBOOST_FEATURE_CACHE_DIR # Add Feature Cache dir
     ]
     for d in dirs_to_create:
         os.makedirs(d, exist_ok=True)
     print(f"All XGBoost output directories ensured under '{XGBOOST_RESULTS_DIR}'")
 
-# --- THIS IS THE MAIN FUNCTION THAT main.py CALLS ---
-def main(): 
+def main():
     """Main function to run the XGBoost Hackathon simulation pipeline."""
-    print("Executing XGBoost Pipeline...") # Added print statement for clarity
-    ensure_all_output_dirs() # Create all directories at the start
+    print("Executing XGBoost Pipeline...") 
+    ensure_all_output_dirs() 
 
     output_paths = {
         'plots_base_dir': XGBOOST_PLOTS_BASE_DIR,
@@ -54,6 +61,8 @@ def main():
         'correlation_data_dir': XGBOOST_CORRELATION_DATA_DIR,
         'importance_data_dir': XGBOOST_IMPORTANCE_DATA_DIR,
         'predictions_data_dir': XGBOOST_PREDICTIONS_DATA_DIR,
+        'tensorboard_logs_dir': XGBOOST_TENSORBOARD_LOGS_DIR,
+        'feature_cache_dir': XGBOOST_FEATURE_CACHE_DIR # Add to output_paths
     }
 
     try:
@@ -73,7 +82,7 @@ def main():
     area_map = areas_data.set_index('Buid_ID')['Area [m2]'].to_dict()
     
     cv_results_xgb = {}
-    print("\nStarting XGBoost Leave-One-Out Cross-Validation within pipeline...") # Clarified print
+    print("\nStarting XGBoost Leave-One-Out Cross-Validation within pipeline...") 
     for bldg_name in building_names:
         fold_result = run_cross_validation_fold(
             held_out_building_name=bldg_name,
@@ -86,17 +95,15 @@ def main():
         if fold_result: 
             cv_results_xgb[bldg_name] = fold_result
     
-    print("XGBoost LOOCV processing complete for all folds within pipeline.") # Clarified print
+    print("XGBoost LOOCV processing complete for all folds within pipeline.") 
 
     if cv_results_xgb: 
         plot_overall_xgboost_results(cv_results_xgb, output_paths) 
         save_summary_stats(cv_results_xgb, output_paths)
     else:
         print("No cross-validation results were generated to plot or summarize for XGBoost.")
-    print("XGBoost Pipeline execution finished.") # Added print statement
+    print("XGBoost Pipeline execution finished.") 
 
 if __name__ == '__main__':
-    # This allows running the XGBoost pipeline directly for testing
-    # In the main project, main.py will call models.xgboost_pipeline.main()
     print("Running XGBoost Pipeline directly (as __main__)...")
     main()

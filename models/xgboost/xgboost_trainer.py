@@ -5,28 +5,26 @@ import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_percentage_error
+import matplotlib
+matplotlib.use('Agg') # <<< ADD THIS LINE AT THE VERY TOP
 import matplotlib.pyplot as plt
-import math
 import seaborn as sns
 import os
 
 # Import from sibling module
 from .xgboost_data_preparer import create_features 
 
-# --- NEW IMPORT for TensorBoard ---
 try:
     from xgboost.callback import TensorBoard
     TENSORBOARD_AVAILABLE = True
 except ImportError:
     print("Warning: xgboost.callback.TensorBoard could not be imported. TensorBoard logging will be disabled. Ensure TensorFlow is installed if you want TensorBoard logging.")
     TENSORBOARD_AVAILABLE = False
-# --- END NEW IMPORT ---
-
 
 FIGURE_DPI = 300 
 
 def hackathon_split(data_with_features, target_building_col, train_months=2):
-    """Splits data for the hackathon scenario (2 months train, rest test for the held-out building)."""
+    # ... (rest of the function remains the same) ...
     print(f"Splitting data for {target_building_col} (hackathon setup)...")
     data_with_features = data_with_features.sort_index()
     
@@ -53,9 +51,9 @@ def run_cross_validation_fold(
     elec_df, 
     weather_df, 
     area_map,
-    output_paths # Dictionary containing paths for saving outputs
+    output_paths 
     ):
-    """Runs a single fold of the leave-one-out cross-validation."""
+    # ... (rest of the function remains the same, including create_features calls) ...
     print(f"\n--- Processing with {held_out_building_name} as the held-out (new) building ---")
     
     train_building_names = [b for b in building_names if b != held_out_building_name]
@@ -64,7 +62,11 @@ def run_cross_validation_fold(
 
     for train_bldg_name in train_building_names:
         data_train_bldg_feat, features_train_bldg = create_features(
-            elec_df[[train_bldg_name]], weather_df.copy(), train_bldg_name, area_map
+            df_elec_single_building=elec_df[[train_bldg_name]], 
+            df_weather_full=weather_df.copy(), 
+            target_building_name=train_bldg_name, 
+            area_map_dict=area_map,
+            output_paths=output_paths 
         )
         if not data_train_bldg_feat.empty and train_bldg_name in data_train_bldg_feat.columns:
             X_train_from_others_list.append(data_train_bldg_feat[features_train_bldg])
@@ -91,7 +93,11 @@ def run_cross_validation_fold(
         return None
 
     data_held_out_feat, features_held_out = create_features(
-        elec_df[[held_out_building_name]], weather_df.copy(), held_out_building_name, area_map
+        df_elec_single_building=elec_df[[held_out_building_name]], 
+        df_weather_full=weather_df.copy(), 
+        target_building_name=held_out_building_name, 
+        area_map_dict=area_map,
+        output_paths=output_paths 
     )
     
     if data_held_out_feat.empty or held_out_building_name not in data_held_out_feat.columns:
@@ -125,7 +131,6 @@ def run_cross_validation_fold(
         print(f"  Training or Test data is empty for {held_out_building_name} before XGBoost. Skipping fold.")
         return None
 
-    # Correlation Analysis (remains the same)
     print(f"  Performing correlation analysis for fold: {held_out_building_name}")
     if not X_train_final.empty:
         corr_matrix = X_train_final.corr()
@@ -180,7 +185,7 @@ def run_cross_validation_fold(
         'objective': 'reg:squarederror', 
         'eval_metric': 'rmse', 
         'eta': 0.03, 
-        'max_depth': math.floor(math.sqrt(X_train_xgb.shape[1])),
+        'max_depth': 7,
         'subsample': 0.8,
         'colsample_bytree': 0.8,
         'seed': 42,
@@ -189,21 +194,16 @@ def run_cross_validation_fold(
     print(f"  Training XGBoost for held-out building: {held_out_building_name}...")
     evals_result_xgb = {} 
     
-    # --- TENSORBOARD INTEGRATION ---
     training_callbacks = []
-    if TENSORBOARD_AVAILABLE:
-        # Sanitize building name for directory
+    if TENSORBOARD_AVAILABLE and 'tensorboard_logs_dir' in output_paths: 
         safe_building_name = "".join(c if c.isalnum() else "_" for c in held_out_building_name)
         log_dir = os.path.join(output_paths['tensorboard_logs_dir'], f"fold_{safe_building_name}")
-        os.makedirs(log_dir, exist_ok=True) # Ensure specific fold log dir exists
+        os.makedirs(log_dir, exist_ok=True) 
         
-        # The TensorBoard callback needs a unique log_dir for each run/fold.
-        # It will create subdirectories for train and eval within this log_dir.
         tensorboard_callback = TensorBoard(log_dir=log_dir, name=f"XGBoost_{safe_building_name}")
         training_callbacks.append(tensorboard_callback)
         print(f"    TensorBoard logging enabled. Logs will be saved to: {log_dir}")
-    # --- END TENSORBOARD INTEGRATION ---
-
+    
     model_xgb = xgb.train(
         params_xgb,
         dtrain_xgb,
@@ -212,7 +212,7 @@ def run_cross_validation_fold(
         evals_result=evals_result_xgb, 
         early_stopping_rounds=100, 
         verbose_eval=100, 
-        callbacks=training_callbacks # Add callbacks list here
+        callbacks=training_callbacks 
     )
     
     predictions_xgb = model_xgb.predict(dtest_xgb)
@@ -235,7 +235,7 @@ def run_cross_validation_fold(
                                             for imp_type, scores_dict in fold_importance_scores.items() 
                                             for feat, score in scores_dict.items()},
                                            orient='index', columns=['score'])
-    if not importance_df.empty: # Check before trying to operate on index/columns
+    if not importance_df.empty: 
         importance_df.index = pd.MultiIndex.from_tuples(importance_df.index, names=['importance_type', 'feature'])
         importance_df = importance_df.unstack(level='importance_type').fillna(0)
         if 'score' in importance_df.columns: 

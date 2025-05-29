@@ -1,1 +1,3 @@
 /__pycache__
+/models/xgboost/__pycache__
+/results/xgboost_results/feature_cache

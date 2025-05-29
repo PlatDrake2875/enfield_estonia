@@ -1,14 +1,16 @@
-# models/xgboost_evaluator.py
+# models/xgboost/xgboost_evaluator.py
 
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import matplotlib
+matplotlib.use('Agg') # <<< ADD THIS LINE AT THE VERY TOP
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import json
 
-FIGURE_DPI = 300 # Defined here for plots generated within this module
+FIGURE_DPI = 300 
 
 def plot_overall_xgboost_results(cv_results, output_paths):
     """Plots overall MAPE comparison, actual vs. predicted for best model, 
@@ -19,9 +21,8 @@ def plot_overall_xgboost_results(cv_results, output_paths):
 
     print("\nPlotting Overall XGBoost LOOCV Results...")
     
-    # Plot 1: MAPE comparison
     fig_mape, ax_mape = plt.subplots(figsize=(16, 8), dpi=FIGURE_DPI) 
-    mapes_cv = {k: v['mape'] for k, v in cv_results.items() if v and 'mape' in v and pd.notna(v['mape'])} # Added check for v being not None
+    mapes_cv = {k: v['mape'] for k, v in cv_results.items() if v and 'mape' in v and pd.notna(v['mape'])} 
     
     if not mapes_cv:
         print("No valid MAPE results to plot.")
@@ -69,7 +70,7 @@ def plot_overall_xgboost_results(cv_results, output_paths):
         print(f"Best building prediction plot saved to {plot_filename_pred}")
         plt.close(fig_pred)
 
-        if 'model' in result_best and hasattr(result_best['model'], 'get_score') and result_best.get('feature_names'): # Check .get for feature_names
+        if 'model' in result_best and hasattr(result_best['model'], 'get_score') and result_best.get('feature_names'): 
             if not result_best['feature_names']:
                 print(f"No feature names available for importance plot of {best_bldg_cv}.")
             else:
@@ -102,7 +103,7 @@ def save_summary_stats(cv_results, output_paths):
         print("No CV results to summarize.")
         return
 
-    all_mapes = [res['mape'] for res in cv_results.values() if res and 'mape' in res and pd.notna(res['mape'])] # Added check for res being not None
+    all_mapes = [res['mape'] for res in cv_results.values() if res and 'mape' in res and pd.notna(res['mape'])] 
     if all_mapes:
         avg_mape = np.mean(all_mapes)
         print(f"\nOverall Average MAPE from XGBoost LOOCV: {avg_mape:.2f}%")
@@ -119,4 +120,3 @@ def save_summary_stats(cv_results, output_paths):
             print(f"Error saving summary JSON: {e}")
     else:
         print("No valid MAPE scores to average for summary.")
-
