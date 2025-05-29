@@ -1,20 +1,25 @@
 ,TARGET
 building_size_m2,0.8030032498511499
 hour,0.08390523297750338
-temp_x_hour,0.07359466114228057
-air temperature,0.06174565580727015
-Mean wind speed,0.05358763750579845
-month,0.02556089156439918
+temp_x_hour,0.07356306092355178
+air temperature,0.06172794881933635
+Mean wind speed,0.05352250851107085
 dayofyear,0.02548122896833269
-weekofyear,0.023933649454279633
-quarter,0.020269883836959643
-dewpoint temperature,0.01830054136440986
 visibility,0.01713544336728266
-Atm pressure mm of mercury,0.009135356052917858
-Max gust value,0.00044831569378932993
+Atm pressure mm of mercury,0.009140705773685311
+cloud_cover_percentage,-0.004001832472825894
 hour_x_dayofweek,-0.04881950193022465
-Relative humidity (%),-0.09401877792967088
+Relative humidity (%),-0.09399206646478715
 dayofweek,-0.12816472656852204
 Mean wind direction,
 Unnamed: 9,
+is_drifting,
+is_fog,
+is_freezing_precip,
+is_grains,
+is_mist,
+is_rain,
+is_shower,
+is_snow,
+weather phenomena,
 year,

@@ -1,7 +1,7 @@
 # main.py
 # Orchestrates the Energy Consumption Forecasting pipeline with selective execution.
 
-import data_cleaning 
+import data_cleaning as data_cleaning 
 import eda
 import baseline_models
 # import gru_model # GRU model removed
@@ -10,7 +10,7 @@ import os
 import argparse 
 
 # --- NEW IMPORT ---
-from models import xgboost_pipeline # Import the new XGBoost pipeline module
+from models.xgboost import xgboost_pipeline # Import the new XGBoost pipeline module
 
 def run_pipeline(args):
     print("Starting Energy Consumption Forecasting Pipeline...\n")

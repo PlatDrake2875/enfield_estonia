@@ -157,7 +157,7 @@ def run_cross_validation_fold(
     # --- End Correlation Analysis ---
 
     X_train_xgb, X_val_xgb, y_train_xgb, y_val_xgb = train_test_split(
-        X_train_final, y_train_final, test_size=0.2, random_state=42, shuffle=False 
+        X_train_final, y_train_final, test_size=0.1, random_state=42, shuffle=False 
     )
 
     print(f"  Final Train shapes for XGB: X={X_train_xgb.shape}, y={y_train_xgb.shape}")
@@ -186,7 +186,7 @@ def run_cross_validation_fold(
         num_boost_round=1000, 
         evals=[(dtrain_xgb, 'train'), (dval_xgb, 'eval')],
         evals_result=evals_result_xgb, 
-        early_stopping_rounds=100, 
+        early_stopping_rounds=30, 
         verbose_eval=100, 
     )
     
