@@ -5,7 +5,7 @@
 # This script will:
 # 1. Import raw data from an Excel file (`Buildings_el.xlsx`) with multiple sheets.
 # 2. Clean and normalize timestamps and numeric values for each sheet.
-# 3. Export cleaned data to separate CSV files.
+# 3. Export cleaned data to separate CSV files in a 'data' subdirectory.
 
 import pandas as pd
 import numpy as np
@@ -15,15 +15,27 @@ import os
 # Define the names of the input Excel file
 INPUT_XLSX = 'Buildings_el.xlsx'
 
-# Define the names for the output CSV files
-OUTPUT_ELECTRICITY_CSV = 'cleaned_electricity.csv'
-OUTPUT_WEATHER_CSV = 'cleaned_weather.csv'
-OUTPUT_AREAS_CSV = 'cleaned_areas.csv'
+# Define the output directory for cleaned CSV files
+DATA_OUTPUT_DIR = 'data'
+
+# Define the names for the output CSV files (filenames only)
+OUTPUT_ELECTRICITY_FILENAME = 'cleaned_electricity.csv'
+OUTPUT_WEATHER_FILENAME = 'cleaned_weather.csv'
+OUTPUT_AREAS_FILENAME = 'cleaned_areas.csv'
 
 # Sheet names (as expected in the input Excel file)
 ELECTRICITY_SHEET = 'Electricity kWh'
 WEATHER_SHEET = 'Weather archive'
 AREAS_SHEET = 'Areas'
+
+def create_output_data_dir():
+    """Creates the output data directory if it doesn't exist."""
+    if not os.path.exists(DATA_OUTPUT_DIR):
+        os.makedirs(DATA_OUTPUT_DIR)
+        print(f"Created output directory: '{DATA_OUTPUT_DIR}'")
+    else:
+        print(f"Output directory '{DATA_OUTPUT_DIR}' already exists or was just created.")
+
 
 # bump_zeros function
 def bump_zeros(df):
@@ -72,7 +84,6 @@ def clean_electricity_data(input_xlsx_path, sheet_name):
     
     if 'Timestamp' not in elec.columns:
         print(f"Error: 'Timestamp' column not found after processing headers in sheet '{sheet_name}'.")
-        # Attempt to find a column that looks like a timestamp
         potential_ts_col = next((col for col in elec.columns if 'time' in str(col).lower() or 'date' in str(col).lower()), None)
         if potential_ts_col:
             print(f"Found potential timestamp column: '{potential_ts_col}'. Using this column and renaming to 'Timestamp'.")
@@ -81,10 +92,6 @@ def clean_electricity_data(input_xlsx_path, sheet_name):
             print("Could not identify a timestamp column. Electricity data cleaning might fail or be incorrect.")
             return None
 
-
-    # If 'Timestamp' column is already datetime, this will handle it.
-    # If it's a string that pandas can parse, it will.
-    # errors='coerce' will turn unparseable dates into NaT.
     elec['Timestamp'] = pd.to_datetime(elec['Timestamp'], errors='coerce')
 
     if elec['Timestamp'].isnull().all():
@@ -135,7 +142,7 @@ def clean_weather_data(input_xlsx_path, sheet_name):
         orig_ts_col_name = weather.columns[0] 
         weather['time_iso'] = pd.to_datetime(
             weather[orig_ts_col_name], format='%d.%m.%Y %H:%M', dayfirst=True, errors='coerce'
-        ).dt.strftime('%Y-%m-%dT%H:%M:%S') # Keep strftime here if time_iso is the final format
+        ).dt.strftime('%Y-%m-%dT%H:%M:%S') 
         weather.drop(columns=[orig_ts_col_name], inplace=True)
     else:
         print(f"Warning: Weather data from sheet '{sheet_name}' is empty or has no columns to process for timestamp.")
@@ -143,11 +150,9 @@ def clean_weather_data(input_xlsx_path, sheet_name):
 
     def map_wind_norm(txt):
         if pd.isna(txt): return np.nan
-        # --- MODIFIED REGEX PATTERN BELOW ---
         piece = re.sub(r'[^A-Za-z\\ -]','',str(txt).split('from the')[-1]).lower().strip()
-        # --- END MODIFICATION ---
         deg = {'north':0,'northeast':45,'east':90,'southeast':135,'south':180,'southwest':225,'west':270,'northwest':315}
-        vals = [deg[t] for t in re.split('[\\\\-\\\\s]+',piece) if t in deg] # Split by literal backslash, literal hyphen, or whitespace
+        vals = [deg[t] for t in re.split('[\\\\-\\\\s]+',piece) if t in deg] 
         return np.mean(vals)/360 if vals else np.nan
 
     if 'Mean wind direction' in weather.columns:
@@ -158,12 +163,12 @@ def clean_weather_data(input_xlsx_path, sheet_name):
         weather[vis_col_name] = (weather[vis_col_name].astype(str)
                          .str.extract(r'(\d+\.?\d*)')[0].astype(float))
         vmin, vmax = weather[vis_col_name].min(), weather[vis_col_name].max()
-        if pd.notna(vmin) and pd.notna(vmax) and vmax > vmin: # Check for NaNs and vmax > vmin
+        if pd.notna(vmin) and pd.notna(vmax) and vmax > vmin: 
             weather[vis_col_name] = (weather[vis_col_name] - vmin)/(vmax-vmin)
-        elif pd.notna(vmin) and pd.notna(vmax) and vmax == vmin: # Handle case where all values are the same
-             weather[vis_col_name] = 0.0 if vmin != 0 else 0.0 # Or 0.5 or 1.0 depending on desired norm
-        else: # Handle case with NaNs or vmin > vmax (should not happen)
-            weather[vis_col_name] = np.nan # Or 0.0
+        elif pd.notna(vmin) and pd.notna(vmax) and vmax == vmin: 
+             weather[vis_col_name] = 0.0 if vmin != 0 else 0.0 
+        else: 
+            weather[vis_col_name] = np.nan 
 
     cols_to_exclude_from_numeric = ['time_iso']
     if 'Mean wind direction' in weather.columns:
@@ -210,7 +215,7 @@ def clean_areas_data(input_xlsx_path, sheet_name):
             areas.rename(columns={potential_area_col: 'Area [m2]'}, inplace=True)
         else:
             print(f"Error: 'Area [m2]' column not found in sheet '{sheet_name}' and no alternative found.")
-            return None # Critical error if area column is missing
+            return None 
 
     areas['Area [m2]'] = pd.to_numeric(areas['Area [m2]'], errors='coerce')
     areas.ffill(inplace=True)
@@ -220,33 +225,38 @@ def clean_areas_data(input_xlsx_path, sheet_name):
     return areas
 
 def save_cleaned_data_to_csv(elec_df, weather_df, areas_df):
-    """Saves the cleaned dataframes to separate CSV files."""
+    """Saves the cleaned dataframes to separate CSV files in the DATA_OUTPUT_DIR."""
+    create_output_data_dir() # Ensure directory exists
+
     if elec_df is not None:
+        output_path = os.path.join(DATA_OUTPUT_DIR, OUTPUT_ELECTRICITY_FILENAME)
         try:
-            elec_df.to_csv(OUTPUT_ELECTRICITY_CSV, index=False)
-            print(f"✅ Cleaned electricity data saved to '{OUTPUT_ELECTRICITY_CSV}'")
+            elec_df.to_csv(output_path, index=False)
+            print(f"✅ Cleaned electricity data saved to '{output_path}'")
         except Exception as e:
             print(f"Error saving cleaned electricity data to CSV: {e}")
     else:
-        print("Electricity dataframe is None. Skipping save for electricity CSV.")
+        print(f"Electricity dataframe is None. Skipping save for {OUTPUT_ELECTRICITY_FILENAME}.")
 
     if weather_df is not None:
+        output_path = os.path.join(DATA_OUTPUT_DIR, OUTPUT_WEATHER_FILENAME)
         try:
-            weather_df.to_csv(OUTPUT_WEATHER_CSV, index=False)
-            print(f"✅ Cleaned weather data saved to '{OUTPUT_WEATHER_CSV}'")
+            weather_df.to_csv(output_path, index=False)
+            print(f"✅ Cleaned weather data saved to '{output_path}'")
         except Exception as e:
             print(f"Error saving cleaned weather data to CSV: {e}")
     else:
-        print("Weather dataframe is None. Skipping save for weather CSV.")
+        print(f"Weather dataframe is None. Skipping save for {OUTPUT_WEATHER_FILENAME}.")
 
     if areas_df is not None:
+        output_path = os.path.join(DATA_OUTPUT_DIR, OUTPUT_AREAS_FILENAME)
         try:
-            areas_df.to_csv(OUTPUT_AREAS_CSV, index=False)
-            print(f"✅ Cleaned areas data saved to '{OUTPUT_AREAS_CSV}'")
+            areas_df.to_csv(output_path, index=False)
+            print(f"✅ Cleaned areas data saved to '{output_path}'")
         except Exception as e:
             print(f"Error saving cleaned areas data to CSV: {e}")
     else:
-        print("Areas dataframe is None. Skipping save for areas CSV.")
+        print(f"Areas dataframe is None. Skipping save for {OUTPUT_AREAS_FILENAME}.")
 
 
 def main():
@@ -260,7 +270,6 @@ def main():
     weather_cleaned = clean_weather_data(INPUT_XLSX, WEATHER_SHEET)
     areas_cleaned = clean_areas_data(INPUT_XLSX, AREAS_SHEET)
     
-    # Check if any critical cleaning step failed before saving
     if elec_cleaned is None or weather_cleaned is None or areas_cleaned is None:
         print("One or more data cleaning steps failed. Output CSV files may be incomplete or not generated.")
     
