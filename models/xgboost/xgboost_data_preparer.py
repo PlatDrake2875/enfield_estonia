@@ -97,6 +97,16 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
     data_feat = df_elec_single_building[[target_building_name]].copy()
     data_feat = data_feat.join(df_weather_full, how='left') 
 
+    # --- 0. Add Building Size Early ---
+    building_size_col = 'building_size_m2' # Standardized name
+    if target_building_name in area_map_dict:
+        data_feat[building_size_col] = area_map_dict[target_building_name]
+    else:
+        data_feat[building_size_col] = np.nan 
+    # Ensure it's numeric and handle potential division by zero/NaN later
+    data_feat[building_size_col] = pd.to_numeric(data_feat[building_size_col], errors='coerce')
+    print(f"  Added '{building_size_col}' feature.")
+
     # --- 1. Phenomena Text Processing (Binary Flags) ---
     if 'phenomena_text' in data_feat.columns:
         phenomena_text_series = data_feat['phenomena_text'].astype(str).fillna('').str.lower()
@@ -132,11 +142,10 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
     print(f"  Creating time-based features...")
     idx = data_feat.index
     data_feat['hour'] = idx.hour
-    data_feat['dayofweek'] = idx.dayofweek # Monday=0, Sunday=6
+    data_feat['dayofweek'] = idx.dayofweek 
     data_feat['dayofyear'] = idx.dayofyear
     data_feat['year'] = idx.year 
     
-    # Cyclical features
     data_feat['hour_sin'] = np.sin(2 * np.pi * data_feat['hour'] / 24.0)
     data_feat['hour_cos'] = np.cos(2 * np.pi * data_feat['hour'] / 24.0)
     data_feat['dayofweek_sin'] = np.sin(2 * np.pi * data_feat['dayofweek'] / 7.0)
@@ -144,24 +153,19 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
     data_feat['dayofyear_sin'] = np.sin(2 * np.pi * data_feat['dayofyear'] / 365.25)
     data_feat['dayofyear_cos'] = np.cos(2 * np.pi * data_feat['dayofyear'] / 365.25)
     
-    # is_weekend feature
-    data_feat['is_weekend'] = data_feat['dayofweek'].apply(lambda x: 1 if x >= 5 else 0) # 5=Saturday, 6=Sunday
+    data_feat['is_weekend'] = data_feat['dayofweek'].apply(lambda x: 1 if x >= 5 else 0)
     print(f"  Created 'is_weekend' feature.")
 
-    # Seasonality feature (categorical then one-hot encoded)
-    month_col = idx.month # Get month from index
+    month_col = idx.month 
     def get_season(month):
         if month in [12, 1, 2]: return 'Winter'
         elif month in [3, 4, 5]: return 'Spring'
         elif month in [6, 7, 8]: return 'Summer'
-        else: return 'Autumn' # 9, 10, 11
+        else: return 'Autumn' 
     
-    data_feat['season_cat'] = month_col.to_series(index=data_feat.index).apply(get_season) # Ensure Series has same index
-    
-    # One-hot encode 'season_cat'
-    season_dummies = pd.get_dummies(data_feat['season_cat'], prefix='season', dtype=int)
+    data_feat['season_cat_temp'] = month_col.to_series(index=data_feat.index).apply(get_season)
+    season_dummies = pd.get_dummies(data_feat['season_cat_temp'], prefix='season', dtype=int)
     data_feat = pd.concat([data_feat, season_dummies], axis=1)
-    # data_feat.drop('season_cat', axis=1, inplace=True) # Drop original categorical season column
     print(f"  Created one-hot encoded season features: {list(season_dummies.columns)}")
     
     # --- 5. Weather Features (Direct, Lags, Rolling) ---
@@ -176,26 +180,26 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
         if temp_col_found:
             break
             
-    weather_features_to_roll = []
+    weather_features_to_process = [] # For lags and rolling
     if temp_col_found:
-        weather_features_to_roll.append(temp_col_found)
+        weather_features_to_process.append(temp_col_found)
         print(f"    Identified temperature column: '{temp_col_found}'")
     else:
-        print(f"    Warning: No standard temperature column found for rolling features.")
+        print(f"    Warning: No standard temperature column found for advanced weather features.")
     
     if 'cloud_cover_percentage' in data_feat.columns:
-        weather_features_to_roll.append('cloud_cover_percentage')
+        weather_features_to_process.append('cloud_cover_percentage')
     if 'visibility' in data_feat.columns: 
-        weather_features_to_roll.append('visibility')
+        weather_features_to_process.append('visibility')
     rh_col_found = next((col for col in data_feat.columns if 'relative humidity' in col.lower()), None)
     if rh_col_found:
-        weather_features_to_roll.append(rh_col_found)
+        weather_features_to_process.append(rh_col_found)
         print(f"    Identified humidity column: '{rh_col_found}'")
 
     weather_rolling_windows = [3, 6, 12, 24] 
     weather_lags = [1, 2, 3, 24]
 
-    for w_feat in weather_features_to_roll:
+    for w_feat in weather_features_to_process:
         if w_feat in data_feat.columns:
             for lag in weather_lags:
                 data_feat[f'{w_feat}_lag_{lag}h'] = data_feat[w_feat].shift(lag)
@@ -206,20 +210,61 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
         else:
             print(f"    Warning: Column '{w_feat}' not found for weather rolling features/lags.")
 
-    # --- 6. Interaction Features ---
-    data_feat['hour_x_dayofweek'] = data_feat['hour'] * data_feat['dayofweek'] 
-    if temp_col_found:
-         data_feat['temp_x_hour'] = data_feat[temp_col_found] * data_feat['hour']
-         print(f"    Created '{temp_col_found}_x_hour' interaction feature.")
+    # --- 6. Consumption per Square Meter Features ---
+    print(f"  Creating consumption per square meter features...")
+    consumption_per_sqm_temp_col = f'{target_building_name}_per_sqm_temp'
+    if building_size_col in data_feat.columns and pd.notna(data_feat[building_size_col]).all(): # Ensure area is not all NaN
+        # Replace 0 or very small area with a small number to avoid division by zero, though bump_zeros should handle this.
+        # data_feat[building_size_col] = data_feat[building_size_col].replace(0, 0.001) # Redundant if bump_zeros worked
+        data_feat[consumption_per_sqm_temp_col] = data_feat[target_building_name] / data_feat[building_size_col]
+        data_feat[consumption_per_sqm_temp_col].replace([np.inf, -np.inf], np.nan, inplace=True) # Handle potential Inf
 
-    # --- 7. Building Size ---
-    if target_building_name in area_map_dict:
-        data_feat[f'building_size_m2'] = area_map_dict[target_building_name]
+        # Lags of consumption_per_sqm
+        for lag in lookback_hours: # Use same lags as target for consistency
+            data_feat[f'consumption_per_sqm_lag_{lag}h'] = data_feat[consumption_per_sqm_temp_col].shift(lag)
+        
+        # Rolling windows of consumption_per_sqm
+        for window in rolling_windows: # Use same windows as target
+            shifted_per_sqm = data_feat[consumption_per_sqm_temp_col].shift(1)
+            data_feat[f'consumption_per_sqm_roll_mean_{window}h'] = shifted_per_sqm.rolling(window=window, min_periods=1).mean()
+            data_feat[f'consumption_per_sqm_roll_std_{window}h'] = shifted_per_sqm.rolling(window=window, min_periods=1).std()
+            data_feat[f'consumption_per_sqm_roll_min_{window}h'] = shifted_per_sqm.rolling(window=window, min_periods=1).min()
+            data_feat[f'consumption_per_sqm_roll_max_{window}h'] = shifted_per_sqm.rolling(window=window, min_periods=1).max()
+            data_feat[f'consumption_per_sqm_roll_median_{window}h'] = shifted_per_sqm.rolling(window=window, min_periods=1).median()
+        print(f"    Created lagged and rolling features for consumption per square meter.")
     else:
-        data_feat[f'building_size_m2'] = np.nan 
+        print(f"    Warning: '{building_size_col}' not available or all NaN. Skipping consumption per square meter features.")
+
+
+    # --- 7. Interaction Features (including with building_size_m2) ---
+    print(f"  Creating interaction features...")
+    data_feat['hour_x_dayofweek'] = data_feat['hour'] * data_feat['dayofweek'] 
+    
+    if building_size_col in data_feat.columns:
+        if 'hour_sin' in data_feat.columns: data_feat[f'{building_size_col}_x_hour_sin'] = data_feat[building_size_col] * data_feat['hour_sin']
+        if 'hour_cos' in data_feat.columns: data_feat[f'{building_size_col}_x_hour_cos'] = data_feat[building_size_col] * data_feat['hour_cos']
+        if 'dayofweek_sin' in data_feat.columns: data_feat[f'{building_size_col}_x_dayofweek_sin'] = data_feat[building_size_col] * data_feat['dayofweek_sin']
+        if 'dayofweek_cos' in data_feat.columns: data_feat[f'{building_size_col}_x_dayofweek_cos'] = data_feat[building_size_col] * data_feat['dayofweek_cos']
+        if temp_col_found:
+             data_feat[f'{building_size_col}_x_{temp_col_found}'] = data_feat[building_size_col] * data_feat[temp_col_found]
+             data_feat[f'{temp_col_found}_x_hour'] = data_feat[temp_col_found] * data_feat['hour'] # Keep this too
+             print(f"    Created interactions with '{building_size_col}' and '{temp_col_found}'.")
+        if 'cloud_cover_percentage' in data_feat.columns:
+            data_feat[f'{building_size_col}_x_cloud_cover'] = data_feat[building_size_col] * data_feat['cloud_cover_percentage']
+            print(f"    Created interactions with '{building_size_col}' and 'cloud_cover_percentage'.")
+    else:
+        print(f"    Warning: '{building_size_col}' not available for interaction features.")
     
     # --- Finalize Feature List & Clean up ---
-    cols_to_exclude_as_features = [target_building_name, 'phenomena_text', 'season_cat'] # Add 'season_cat'
+    cols_to_exclude_as_features = [
+        target_building_name, 
+        'phenomena_text', 
+        'season_cat_temp', # Temporary column for season
+        consumption_per_sqm_temp_col if consumption_per_sqm_temp_col in data_feat.columns else None # Exclude the temp per_sqm column
+    ]
+    # Remove None from list if consumption_per_sqm_temp_col was not created
+    cols_to_exclude_as_features = [col for col in cols_to_exclude_as_features if col is not None]
+
     original_cloud_col_name_check = next((c for c in data_feat.columns if 'total cloud cover' in c.lower() or c.lower() == 'c'), None)
     if original_cloud_col_name_check:
         if original_cloud_col_name_check != 'cloud_cover_percentage': 
@@ -256,19 +301,16 @@ if __name__ == '__main__':
                 print(f"\nTotal features for {test_bldg}: {len(feature_list)}")
                 
                 print("\nChecking for new feature types:")
-                newly_added_features_to_check = ['is_weekend', 'season_Winter', 'season_Spring', 'season_Summer', 'season_Autumn']
-                for new_feat in newly_added_features_to_check:
-                    if new_feat in feature_list:
-                        print(f"  Found new feature: {new_feat}")
+                newly_added_features_to_check = [
+                    'is_weekend', 'season_Winter', 
+                    'consumption_per_sqm_lag_1h', 'consumption_per_sqm_roll_mean_3h',
+                    'building_size_m2_x_hour_sin', 'building_size_m2_x_cloud_cover'
+                ]
+                for new_feat_pattern in newly_added_features_to_check:
+                    if any(new_feat_pattern in f_name for f_name in feature_list):
+                        print(f"  Found features related to: {new_feat_pattern}")
                     else:
-                         print(f"  MISSING expected new feature: {new_feat}")
-
-                omitted_date_features = ['month', 'quarter', 'weekofyear'] # These should still be omitted
-                for feat in omitted_date_features:
-                    if feat in features_df.columns or feat in feature_list :
-                        print(f"  ERROR: Feature '{feat}' was NOT omitted.")
-                    else:
-                        print(f"  Correct: Feature '{feat}' was omitted.")
+                         print(f"  MISSING expected features related to: {new_feat_pattern}")
             else:
                 print("No building columns in electricity data to test feature creation.")
         else:

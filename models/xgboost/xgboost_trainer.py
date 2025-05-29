@@ -180,7 +180,7 @@ def run_cross_validation_fold(
         'objective': 'reg:squarederror', 
         'eval_metric': 'rmse', 
         'eta': 0.03, 
-        'max_depth': ,
+        'max_depth': math.floor(math.sqrt(X_train_xgb.shape[1])),
         'subsample': 0.8,
         'colsample_bytree': 0.8,
         'seed': 42,
