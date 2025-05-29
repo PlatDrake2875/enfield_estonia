@@ -111,9 +111,11 @@ consumption_per_sqm_roll_min_168h,0.0893319062527257
 consumption_per_sqm_roll_min_24h,0.08183342637954989
 consumption_per_sqm_roll_min_48h,0.0811645050192002
 hour,0.07877543514863711
+cdd,0.0687735106355109
 Mean wind speed,0.05629926577709012
 Relative humidity (%)_roll_mean_12h,0.05098761530278194
 dayofyear_cos,0.039123320386047516
+air temperature_sq,0.03872674896187084
 season_Winter,0.036968908599093214
 visibility_roll_std_12h,0.033473089780300946
 air temperature_x_hour,0.03202817244077275
@@ -128,9 +130,11 @@ cloud_cover_percentage_lag_3h,0.025476056135447133
 cloud_cover_percentage_roll_mean_24h,0.02330239699135868
 cloud_cover_percentage_roll_mean_12h,0.022554573100583737
 visibility_roll_std_24h,0.022257096795093658
+air temperature_x_season_Spring,0.019637336388611593
 Relative humidity (%)_roll_mean_24h,0.01869611995665077
 visibility_roll_std_3h,0.017463483666552423
 air temperature,0.013043307581259298
+air temperature_x_season_Autumn,0.01079157591637459
 air temperature_lag_24h,0.009914549809750374
 air temperature_roll_std_6h,0.00985254103872491
 air temperature_roll_std_3h,0.009348364007318382
@@ -142,11 +146,14 @@ air temperature_roll_std_12h,0.0039855223697075155
 Relative humidity (%)_roll_mean_6h,0.003541062779384772
 dayofyear_sin,0.0025842352375566977
 cloud_cover_percentage_roll_std_3h,0.0009873980105323929
+air temperature_x_season_Winter,0.00041096962833746145
 air temperature_lag_2h,-0.0010405342168999482
 visibility_lag_24h,-0.0010679195734057932
 air temperature_roll_mean_3h,-0.001465539893450633
+air temperature_x_season_Summer,-0.0022796604523935052
 Relative humidity (%)_roll_std_6h,-0.0023880247782947653
 cloud_cover_percentage_roll_std_6h,-0.0028971089445935035
+hdd,-0.003651126197548661
 visibility,-0.005271635974832047
 cloud_cover_percentage_roll_std_24h,-0.006398039634119266
 Relative humidity (%)_lag_3h,-0.007528888647614008
@@ -176,6 +183,7 @@ Relative humidity (%)_lag_1h,-0.042651198934352964
 Relative humidity (%),-0.055040455264729025
 Relative humidity (%)_lag_24h,-0.05617931507039914
 hour_sin,-0.07373407878483018
+air temperature_x_is_weekend,-0.07411202460456438
 log_building_size_m2_x_hour_sin,-0.07889458724136278
 building_size_m2_x_hour_sin,-0.08416783883394618
 dayofweek,-0.11408821670944742

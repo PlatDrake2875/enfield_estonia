@@ -105,6 +105,7 @@ consumption_per_sqm_roll_mean_48h,0.07758399677069891
 log_building_size_m2_x_air temperature,0.07710246897092723
 consumption_per_sqm_roll_mean_168h,0.06799115228323098
 Mean wind speed,0.06288302597058996
+cdd,0.061278880447752454
 consumption_per_sqm_roll_median_48h,0.06052285721056134
 dayofyear_cos,0.05970108211498409
 season_Winter,0.058853610615558084
@@ -121,20 +122,25 @@ cloud_cover_percentage_roll_mean_24h,0.03334975268206168
 visibility_roll_std_6h,0.031847047855915356
 cloud_cover_percentage_roll_mean_12h,0.03171676770827988
 visibility_roll_std_24h,0.03144470135298582
+air temperature_x_season_Spring,0.027894560256813104
 dayofyear_sin,0.02334577775848052
 Relative humidity (%)_roll_mean_24h,0.022719631330040985
 visibility_roll_std_3h,0.021273507969987553
+air temperature_sq,0.021009924798646544
 consumption_per_sqm_roll_median_168h,0.02053311071589642
 air temperature_x_hour,0.018752156001501978
+hdd,0.014391080949112161
 Atm pressure mm of mercury,0.010097265064891663
 consumption_per_sqm_lag_12h,0.00832326796690065
 air temperature_roll_std_6h,0.00598912310627116
 Relative humidity (%)_roll_mean_6h,0.005747339029852689
 consumption_per_sqm_roll_min_12h,0.005049069608157143
+air temperature_x_season_Autumn,0.004936463255089793
 air temperature_roll_std_3h,0.0048545868159559705
 Relative humidity (%)_roll_std_3h,0.0020629168386204493
 consumption_per_sqm_roll_min_168h,2.8527577593647874e-05
 season_Autumn,-0.00020345861520146519
+air temperature_x_season_Winter,-0.0017232851614658398
 cloud_cover_percentage_roll_std_3h,-0.001948240627777914
 air temperature_roll_std_12h,-0.002764441988185823
 air temperature,-0.0049712929442118844
@@ -156,6 +162,7 @@ air temperature_lag_2h,-0.019891928626940864
 air temperature_roll_mean_3h,-0.020417195680426513
 dayofweek_cos,-0.02113443895485499
 visibility_roll_mean_3h,-0.021485016692453965
+air temperature_x_season_Summer,-0.02312160567463616
 air temperature_roll_std_24h,-0.024057631107046406
 visibility_lag_3h,-0.024917324117523718
 Relative humidity (%)_roll_mean_3h,-0.026053714312292413
@@ -177,6 +184,7 @@ Relative humidity (%)_lag_24h,-0.057728564929309834
 air temperature_roll_mean_12h,-0.058852974800358185
 hour_sin,-0.07888666375984162
 log_building_size_m2_x_hour_sin,-0.08459343039108969
+air temperature_x_is_weekend,-0.0896195104246502
 building_size_m2_x_hour_sin,-0.09078343225213015
 dayofweek,-0.12528342108777107
 is_weekend,-0.14449011956807806

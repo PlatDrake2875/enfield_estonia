@@ -111,15 +111,19 @@ consumption_per_sqm_roll_min_168h,0.09161513669896723
 consumption_per_sqm_roll_min_24h,0.08343554030876987
 hour,0.0828684447027578
 consumption_per_sqm_roll_min_48h,0.08267917711588182
+cdd,0.07662693653206477
 Mean wind speed,0.0556798081117255
+air temperature_sq,0.05262766041869098
 air temperature_x_hour,0.047941170507292116
 Relative humidity (%)_roll_mean_12h,0.038621311627597674
 air temperature,0.029470409112207156
+air temperature_x_season_Spring,0.026495714873308516
 air temperature_lag_24h,0.025711937147215026
 visibility_roll_std_12h,0.024940584753066108
 air temperature_lag_1h,0.02381786505198738
 dayofyear_cos,0.02269275677032062
 season_Winter,0.020952203592020272
+air temperature_x_season_Autumn,0.01939612399001536
 air temperature_roll_std_6h,0.019248891826348896
 visibility_roll_std_6h,0.01830235883762241
 cloud_cover_percentage_roll_mean_3h,0.016814881516181057
@@ -143,7 +147,9 @@ Atm pressure mm of mercury,0.008546406754232417
 Relative humidity (%)_roll_mean_24h,0.00784353331027695
 Relative humidity (%)_roll_std_6h,0.006979623826784722
 air temperature_lag_3h,0.00678526286954265
+air temperature_x_season_Summer,0.006129678457558318
 visibility_lag_24h,0.005740035324701806
+air temperature_x_season_Winter,0.005526389362372987
 visibility,0.002319831689665855
 cloud_cover_percentage_roll_std_3h,0.0014477956788930834
 air temperature_roll_mean_6h,0.0012658232893357733
@@ -166,6 +172,7 @@ season_Summer,-0.016319513479210693
 dayofyear,-0.01654389948367581
 visibility_roll_mean_24h,-0.017320837646016243
 dayofweek_cos,-0.019742247888846806
+hdd,-0.01995196130687651
 Relative humidity (%)_lag_3h,-0.02044619384160175
 air temperature_roll_mean_12h,-0.02051781168710643
 visibility_roll_mean_12h,-0.02644622125808784
@@ -173,6 +180,7 @@ hour_x_dayofweek,-0.03580320795411711
 Relative humidity (%)_roll_mean_3h,-0.03906613512314051
 Relative humidity (%)_lag_2h,-0.039265960717670634
 Relative humidity (%)_lag_1h,-0.05518702738166962
+air temperature_x_is_weekend,-0.06286763013803011
 Relative humidity (%)_lag_24h,-0.06638343064352761
 Relative humidity (%),-0.06690373722876027
 hour_sin,-0.08116744138732782
