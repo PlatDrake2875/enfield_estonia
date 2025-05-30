@@ -128,12 +128,11 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
     if lookback_hours is None:
         lookback_hours = [1, 2, 3, 4, 5, 6, 12, 23, 24, 25, 47, 48, 49, 71, 72, 73, 167, 168, 169, 335, 336, 337]
     if rolling_windows is None:
-        rolling_windows = [3, 6, 12, 24, 48, 168]
+        rolling_windows = [3, 6, 12, 24, 48, 72, 168, 336]
     
     data_feat = df_elec_single_building[[target_building_name]].copy()
     data_feat = data_feat.join(df_weather_full, how='left') 
     
-    # List to collect new feature Series
     new_features_to_concat = [] 
 
     # --- 0. Add Building Size and Derived Area Features ---
@@ -141,15 +140,15 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
     log_building_size_col = 'log_building_size_m2'
     
     current_building_area = area_map_dict.get(target_building_name, np.nan)
-    # Add directly to data_feat as they are needed early
     data_feat[building_size_col] = pd.to_numeric(current_building_area, errors='coerce') 
-    data_feat[building_size_col].fillna(0, inplace=True)
+    data_feat[building_size_col] = data_feat[building_size_col].fillna(0)
     data_feat[log_building_size_col] = np.log1p(data_feat[building_size_col])
     print(f"  Added '{building_size_col}' and '{log_building_size_col}' features.")
 
     all_areas = pd.Series(area_map_dict.values()).dropna() 
     area_bin_cat_temp_col = 'area_bin_cat_temp' 
-    data_feat[area_bin_cat_temp_col] = -1 # Initialize temp column in data_feat
+    data_feat[area_bin_cat_temp_col] = -1 
+    area_bin_dummies_cols = [] 
 
     if not all_areas.empty and all_areas.nunique() > 1 : 
         try:
@@ -159,15 +158,15 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
                 bin_edges = np.unique(bin_edges) 
                 if len(bin_edges) > 1:
                     data_feat[area_bin_cat_temp_col] = pd.cut(data_feat[building_size_col], bins=bin_edges, labels=False, include_lowest=True, duplicates='drop')
-                    data_feat[area_bin_cat_temp_col].fillna(-1, inplace=True) 
+                    data_feat[area_bin_cat_temp_col] = data_feat[area_bin_cat_temp_col].fillna(-1)
                     
                     area_bin_dummies = pd.get_dummies(data_feat[area_bin_cat_temp_col], prefix='area_qbin', dtype=int)
-                    for col in area_bin_dummies.columns: 
-                        new_features_to_concat.append(area_bin_dummies[col].rename(col)) # Collect dummies
-                    print(f"  Created one-hot encoded area quantile bins: {list(area_bin_dummies.columns)}")
+                    area_bin_dummies_cols = area_bin_dummies.columns.tolist()
+                    for col in area_bin_dummies_cols: 
+                        new_features_to_concat.append(area_bin_dummies[col].rename(col)) 
+                    print(f"  Created one-hot encoded area quantile bins: {area_bin_dummies_cols}")
         except Exception as e_bin:
             print(f"  Warning: Could not create quantile bins for area: {e_bin}")
-            # data_feat[area_bin_cat_temp_col] is already initialized
 
     # --- 1. Phenomena Text Processing (Binary Flags) ---
     if 'phenomena_text' in data_feat.columns:
@@ -185,37 +184,55 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
 
     # --- 2. Target Lagged Features ---
     print(f"  Creating target lags for {target_building_name}...")
+    target_lags_to_add = {} 
     for lag in lookback_hours:
-        new_features_to_concat.append(data_feat[target_building_name].shift(lag).rename(f'{target_building_name}_lag_{lag}h'))
+        lag_col_name = f'{target_building_name}_lag_{lag}h'
+        target_lags_to_add[lag_col_name] = data_feat[target_building_name].shift(lag)
+        new_features_to_concat.append(target_lags_to_add[lag_col_name]) 
     
+    epsilon = 1e-6 
+    if f'{target_building_name}_lag_1h' in target_lags_to_add: 
+        new_features_to_concat.append((data_feat[target_building_name] - target_lags_to_add[f'{target_building_name}_lag_1h']).rename(f'{target_building_name}_diff_1h'))
+    if f'{target_building_name}_lag_24h' in target_lags_to_add:
+        new_features_to_concat.append((data_feat[target_building_name] - target_lags_to_add[f'{target_building_name}_lag_24h']).rename(f'{target_building_name}_diff_24h'))
+        new_features_to_concat.append((data_feat[target_building_name] / (target_lags_to_add[f'{target_building_name}_lag_24h'] + epsilon)).rename(f'{target_building_name}_ratio_lag24h'))
+    print(f"  Created rate of change and ratio features for target consumption.")
+
     # --- 3. Target Rolling Window Features ---
     print(f"  Creating target rolling window features for {target_building_name}...")
+    target_rolling_to_add = {}
     for window in rolling_windows:
         shifted_target = data_feat[target_building_name].shift(1) 
-        new_features_to_concat.append(shifted_target.rolling(window=window, min_periods=1).agg("mean").rename(f'{target_building_name}_roll_mean_{window}h'))
+        roll_mean_col = f'{target_building_name}_roll_mean_{window}h'
+        target_rolling_to_add[roll_mean_col] = shifted_target.rolling(window=window, min_periods=1).agg("mean")
+        new_features_to_concat.append(target_rolling_to_add[roll_mean_col])
+        
         new_features_to_concat.append(shifted_target.rolling(window=window, min_periods=1).agg("std").rename(f'{target_building_name}_roll_std_{window}h'))
         new_features_to_concat.append(shifted_target.rolling(window=window, min_periods=1).agg("min").rename(f'{target_building_name}_roll_min_{window}h'))
         new_features_to_concat.append(shifted_target.rolling(window=window, min_periods=1).agg("max").rename(f'{target_building_name}_roll_max_{window}h'))
         new_features_to_concat.append(shifted_target.rolling(window=window, min_periods=1).agg("median").rename(f'{target_building_name}_roll_median_{window}h'))
+    
+    if f'{target_building_name}_roll_mean_24h' in target_rolling_to_add: 
+         new_features_to_concat.append((data_feat[target_building_name] / (target_rolling_to_add[f'{target_building_name}_roll_mean_24h'] + epsilon)).rename(f'{target_building_name}_ratio_roll_mean24h'))
 
-    # --- 4. Time-Based Features (Raw, Cyclical, Weekend, Season) ---
+    # --- 4. Time-Based Features ---
     print(f"  Creating time-based features...")
     idx = data_feat.index
-    hour_s = pd.Series(idx.hour, index=idx, name='hour') # Explicit Series
-    dayofweek_s = pd.Series(idx.dayofweek, index=idx, name='dayofweek') # Explicit Series
-    dayofyear_s = pd.Series(idx.dayofyear, index=idx, name='dayofyear') # Explicit Series
+    hour_s = pd.Series(idx.hour, index=idx, name='hour')
+    dayofweek_s = pd.Series(idx.dayofweek, index=idx, name='dayofweek') 
+    dayofyear_s = pd.Series(idx.dayofyear, index=idx, name='dayofyear') 
     
-    new_features_to_concat.extend([hour_s, dayofweek_s, dayofyear_s, pd.Series(idx.year, index=idx, name='year')])
+    new_features_to_concat.extend([hour_s, dayofweek_s, dayofyear_s, pd.Series(idx.year, index=idx, name='year')]) 
     
     new_features_to_concat.append(np.sin(2 * np.pi * hour_s / 24.0).rename('hour_sin'))
-    new_features_to_concat.append(np.cos(2 * np.pi * hour_s / 24.0).rename('hour_cos'))
-    new_features_to_concat.append(np.sin(2 * np.pi * dayofweek_s / 7.0).rename('dayofweek_sin'))
-    new_features_to_concat.append(np.cos(2 * np.pi * dayofweek_s / 7.0).rename('dayofweek_cos'))
+    new_features_to_concat.append(np.cos(2 * np.pi * hour_s / 24.0).rename('hour_cos')) 
+    new_features_to_concat.append(np.sin(2 * np.pi * dayofweek_s / 7.0).rename('dayofweek_sin')) 
+    new_features_to_concat.append(np.cos(2 * np.pi * dayofweek_s / 7.0).rename('dayofweek_cos')) 
     new_features_to_concat.append(np.sin(2 * np.pi * dayofyear_s / 365.25).rename('dayofyear_sin'))
     new_features_to_concat.append(np.cos(2 * np.pi * dayofyear_s / 365.25).rename('dayofyear_cos'))
     
-    new_features_to_concat.append(dayofweek_s.apply(lambda x: 1 if x >= 5 else 0).rename('is_weekend')) # Apply on Series
-    print(f"  Created 'is_weekend' feature.")
+    new_features_to_concat.append(dayofweek_s.apply(lambda x: 1 if x >= 5 else 0).rename('is_weekend')) 
+    print(f"  Re-added 'is_weekend', 'dayofweek', and cyclical time features.")
 
     month_series = pd.Series(idx.month, index=idx) 
     season_cat_temp_col = 'season_cat_temp' 
@@ -224,10 +241,7 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
         elif month_val in [3, 4, 5]: return 'Spring'
         elif month_val in [6, 7, 8]: return 'Summer'
         else: return 'Autumn' 
-    
-    # Add the temp categorical season to new_features_to_concat
     new_features_to_concat.append(month_series.apply(get_season).rename(season_cat_temp_col))
-    # One-hot encode 'season_cat_temp' after it's part of data_feat (after first concat)
     
     # --- 5. Weather Features (Direct, Lags, Rolling) ---
     print(f"  Creating weather-based features...")
@@ -256,42 +270,42 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
                 new_features_to_concat.append(shifted_w_feat.rolling(window=window, min_periods=1).agg("mean").rename(f'{w_feat}_roll_mean_{window}h'))
                 new_features_to_concat.append(shifted_w_feat.rolling(window=window, min_periods=1).agg("std").rename(f'{w_feat}_roll_std_{window}h'))
 
-    # --- Concatenate all collected features to data_feat ---
+    # --- Concatenate all collected features before creating interactions and consumption-per-area ---
     if new_features_to_concat:
-        data_feat = pd.concat([data_feat] + new_features_to_concat, axis=1)
+        existing_cols = set(data_feat.columns)
+        unique_new_series = []
+        for s in new_features_to_concat:
+            if s.name not in existing_cols:
+                unique_new_series.append(s)
+                existing_cols.add(s.name) 
+        if unique_new_series:
+            data_feat = pd.concat([data_feat] + unique_new_series, axis=1)
     
-    # --- Now that season_cat_temp is in data_feat, create dummies ---
     if season_cat_temp_col in data_feat.columns:
         season_dummies = pd.get_dummies(data_feat[season_cat_temp_col], prefix='season', dtype=int)
-        data_feat = pd.concat([data_feat, season_dummies], axis=1)
+        data_feat = pd.concat([data_feat, season_dummies], axis=1) 
         print(f"  Created one-hot encoded season features: {list(season_dummies.columns)}")
-    else:
-        print(f"  Warning: '{season_cat_temp_col}' not found in data_feat. Skipping season dummy creation.")
-
 
     # --- 6. Consumption per Square Meter & per Log-Square Meter Features ---
     print(f"  Creating consumption per area features...")
-    consumption_per_sqm_temp_col = f'{target_building_name}_per_sqm_temp' # Temporary column name
+    consumption_per_sqm_temp_col = f'{target_building_name}_per_sqm_temp' 
+    temp_consumption_features_sqm = []
     if building_size_col in data_feat.columns and data_feat[building_size_col].nunique() > 0 and data_feat[building_size_col].iloc[0] > 0.0001 : 
         data_feat[consumption_per_sqm_temp_col] = data_feat[target_building_name] / data_feat[building_size_col]
-        data_feat[consumption_per_sqm_temp_col] = data_feat[consumption_per_sqm_temp_col].replace([np.inf, -np.inf], np.nan) # No inplace
-        
-        temp_consumption_features = []
+        data_feat[consumption_per_sqm_temp_col] = data_feat[consumption_per_sqm_temp_col].replace([np.inf, -np.inf], np.nan)
         for lag in lookback_hours: 
-            temp_consumption_features.append(data_feat[consumption_per_sqm_temp_col].shift(lag).rename(f'consumption_per_sqm_lag_{lag}h'))
+            temp_consumption_features_sqm.append(data_feat[consumption_per_sqm_temp_col].shift(lag).rename(f'consumption_per_sqm_lag_{lag}h'))
         for window in rolling_windows:
             shifted_per_sqm = data_feat[consumption_per_sqm_temp_col].shift(1)
             for agg_func_name_str in ["mean", "std", "min", "max", "median"]:
-                temp_consumption_features.append(shifted_per_sqm.rolling(window=window, min_periods=1).agg(agg_func_name_str).rename(f'consumption_per_sqm_roll_{agg_func_name_str}_{window}h'))
-        if temp_consumption_features: data_feat = pd.concat([data_feat] + temp_consumption_features, axis=1)
-        print(f"    Created features for consumption per raw square meter.")
+                temp_consumption_features_sqm.append(shifted_per_sqm.rolling(window=window, min_periods=1).agg(agg_func_name_str).rename(f'consumption_per_sqm_roll_{agg_func_name_str}_{window}h'))
+        if temp_consumption_features_sqm: data_feat = pd.concat([data_feat] + temp_consumption_features_sqm, axis=1)
     
-    consumption_per_log_sqm_temp_col = f'{target_building_name}_per_log_sqm_temp' # Temporary column name
+    consumption_per_log_sqm_temp_col = f'{target_building_name}_per_log_sqm_temp' 
+    temp_log_consumption_features = []
     if log_building_size_col in data_feat.columns and data_feat[log_building_size_col].nunique() > 0 and data_feat[log_building_size_col].iloc[0] > 0.0001: 
         data_feat[consumption_per_log_sqm_temp_col] = data_feat[target_building_name] / data_feat[log_building_size_col]
-        data_feat[consumption_per_log_sqm_temp_col] = data_feat[consumption_per_log_sqm_temp_col].replace([np.inf, -np.inf], np.nan) # No inplace
-        
-        temp_log_consumption_features = []
+        data_feat[consumption_per_log_sqm_temp_col] = data_feat[consumption_per_log_sqm_temp_col].replace([np.inf, -np.inf], np.nan)
         for lag in lookback_hours: 
             temp_log_consumption_features.append(data_feat[consumption_per_log_sqm_temp_col].shift(lag).rename(f'consumption_per_log_sqm_lag_{lag}h'))
         for window in rolling_windows:
@@ -299,45 +313,57 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
             for agg_func_name_str in ["mean", "std", "min", "max", "median"]:
                  temp_log_consumption_features.append(shifted_per_log_sqm.rolling(window=window, min_periods=1).agg(agg_func_name_str).rename(f'consumption_per_log_sqm_roll_{agg_func_name_str}_{window}h'))
         if temp_log_consumption_features: data_feat = pd.concat([data_feat] + temp_log_consumption_features, axis=1)
-        print(f"    Created features for consumption per log-square meter.")
     
-    # --- 7. Temperature Derived Features (HDD, CDD, Temp^2) ---
+    # --- 7. Temperature Derived Features (HDD, CDD, Temp^2, Temp^3) --- 
     base_temp_hdd_cdd = 18.0 
-    temp_derived_features_to_add = {}
+    temp_derived_features_to_add_dict = {} 
     if temp_col_found and temp_col_found in data_feat.columns: 
-        print(f"  Creating HDD, CDD, and Temp^2 features using '{temp_col_found}'.")
+        print(f"  Creating HDD, CDD, Temp^2, and Temp^3 features using '{temp_col_found}'.")
         temp_series = data_feat[temp_col_found]
-        temp_derived_features_to_add['hdd'] = np.maximum(0, base_temp_hdd_cdd - temp_series)
-        temp_derived_features_to_add['cdd'] = np.maximum(0, temp_series - base_temp_hdd_cdd)
-        temp_derived_features_to_add[f'{temp_col_found}_sq'] = temp_series ** 2
-    if temp_derived_features_to_add:
-        data_feat = pd.concat([data_feat] + [s.rename(name) for name, s in temp_derived_features_to_add.items()], axis=1)
-
+        temp_derived_features_to_add_dict['hdd'] = np.maximum(0, base_temp_hdd_cdd - temp_series)
+        temp_derived_features_to_add_dict['cdd'] = np.maximum(0, temp_series - base_temp_hdd_cdd)
+        temp_derived_features_to_add_dict[f'{temp_col_found}_sq'] = temp_series ** 2
+        temp_derived_features_to_add_dict[f'{temp_col_found}_cubed'] = temp_series ** 3 
+    if temp_derived_features_to_add_dict: 
+        data_feat = pd.concat([data_feat] + [s.rename(name) for name, s in temp_derived_features_to_add_dict.items() if name not in data_feat.columns], axis=1)
 
     # --- 8. Interaction Features ---
     print(f"  Creating interaction features...")
-    interaction_features_to_add = {} 
-    if 'hour' in data_feat.columns and 'dayofweek' in data_feat.columns:
-        interaction_features_to_add['hour_x_dayofweek'] = data_feat['hour'] * data_feat['dayofweek'] 
-    if building_size_col in data_feat.columns:
-        if 'hour_sin' in data_feat.columns: interaction_features_to_add[f'{building_size_col}_x_hour_sin'] = data_feat[building_size_col] * data_feat['hour_sin']
-        if 'hour_cos' in data_feat.columns: interaction_features_to_add[f'{building_size_col}_x_hour_cos'] = data_feat[building_size_col] * data_feat['hour_cos']
-        if temp_col_found and temp_col_found in data_feat.columns: interaction_features_to_add[f'{building_size_col}_x_{temp_col_found}'] = data_feat[building_size_col] * data_feat[temp_col_found]
-        if 'cloud_cover_percentage' in data_feat.columns: interaction_features_to_add[f'{building_size_col}_x_cloud_cover'] = data_feat[building_size_col] * data_feat['cloud_cover_percentage']
-    if log_building_size_col in data_feat.columns:
-        if 'hour_sin' in data_feat.columns: interaction_features_to_add[f'{log_building_size_col}_x_hour_sin'] = data_feat[log_building_size_col] * data_feat['hour_sin']
-        if 'hour_cos' in data_feat.columns: interaction_features_to_add[f'{log_building_size_col}_x_hour_cos'] = data_feat[log_building_size_col] * data_feat['hour_cos']
-        if temp_col_found and temp_col_found in data_feat.columns: interaction_features_to_add[f'{log_building_size_col}_x_{temp_col_found}'] = data_feat[log_building_size_col] * data_feat[temp_col_found]
-        if 'cloud_cover_percentage' in data_feat.columns: interaction_features_to_add[f'{log_building_size_col}_x_cloud_cover'] = data_feat[log_building_size_col] * data_feat['cloud_cover_percentage']
-    if temp_col_found and temp_col_found in data_feat.columns:
-        if 'hour' in data_feat.columns: interaction_features_to_add[f'{temp_col_found}_x_hour'] = data_feat[temp_col_found] * data_feat['hour']
-        if 'is_weekend' in data_feat.columns: interaction_features_to_add[f'{temp_col_found}_x_is_weekend'] = data_feat[temp_col_found] * data_feat['is_weekend']
-        for season_col_dummy in ['season_Winter', 'season_Spring', 'season_Summer', 'season_Autumn']: # Use dummy names
-            if season_col_dummy in data_feat.columns:
-                interaction_features_to_add[f'{temp_col_found}_x_{season_col_dummy}'] = data_feat[temp_col_found] * data_feat[season_col_dummy]
+    interaction_features_to_add_dict = {} 
     
-    if interaction_features_to_add:
-        data_feat = pd.concat([data_feat] + [s.rename(name) for name, s in interaction_features_to_add.items() if name not in data_feat.columns], axis=1)
+    if 'hour' in data_feat.columns and 'dayofweek' in data_feat.columns: 
+        interaction_features_to_add_dict['hour_x_dayofweek'] = data_feat['hour'] * data_feat['dayofweek'] 
+    
+    if building_size_col in data_feat.columns:
+        if 'hour_sin' in data_feat.columns: interaction_features_to_add_dict[f'{building_size_col}_x_hour_sin'] = data_feat[building_size_col] * data_feat['hour_sin']
+        if 'hour_cos' in data_feat.columns: interaction_features_to_add_dict[f'{building_size_col}_x_hour_cos'] = data_feat[building_size_col] * data_feat['hour_cos'] 
+        if temp_col_found and temp_col_found in data_feat.columns: interaction_features_to_add_dict[f'{building_size_col}_x_{temp_col_found}'] = data_feat[building_size_col] * data_feat[temp_col_found]
+        if 'cloud_cover_percentage' in data_feat.columns: interaction_features_to_add_dict[f'{building_size_col}_x_cloud_cover'] = data_feat[building_size_col] * data_feat['cloud_cover_percentage']
+    
+    if log_building_size_col in data_feat.columns:
+        if 'hour_sin' in data_feat.columns: interaction_features_to_add_dict[f'{log_building_size_col}_x_hour_sin'] = data_feat[log_building_size_col] * data_feat['hour_sin']
+        if 'hour_cos' in data_feat.columns: interaction_features_to_add_dict[f'{log_building_size_col}_x_hour_cos'] = data_feat[log_building_size_col] * data_feat['hour_cos'] 
+        if temp_col_found and temp_col_found in data_feat.columns: interaction_features_to_add_dict[f'{log_building_size_col}_x_{temp_col_found}'] = data_feat[log_building_size_col] * data_feat[temp_col_found]
+        if 'cloud_cover_percentage' in data_feat.columns: interaction_features_to_add_dict[f'{log_building_size_col}_x_cloud_cover'] = data_feat[log_building_size_col] * data_feat['cloud_cover_percentage']
+    
+    if temp_col_found and temp_col_found in data_feat.columns:
+        if 'hour' in data_feat.columns: interaction_features_to_add_dict[f'{temp_col_found}_x_hour'] = data_feat[temp_col_found] * data_feat['hour']
+        if 'is_weekend' in data_feat.columns: interaction_features_to_add_dict[f'{temp_col_found}_x_is_weekend'] = data_feat[temp_col_found] * data_feat['is_weekend'] 
+        for season_col_dummy in ['season_Winter', 'season_Spring', 'season_Summer', 'season_Autumn']: 
+            if season_col_dummy in data_feat.columns:
+                interaction_features_to_add_dict[f'{temp_col_found}_x_{season_col_dummy}'] = data_feat[temp_col_found] * data_feat[season_col_dummy]
+    
+    if area_bin_dummies_cols: 
+        for area_bin_col in area_bin_dummies_cols:
+            if area_bin_col in data_feat.columns: 
+                if temp_col_found and temp_col_found in data_feat.columns:
+                    interaction_features_to_add_dict[f'{area_bin_col}_x_{temp_col_found}'] = data_feat[area_bin_col] * data_feat[temp_col_found]
+                if 'hour_sin' in data_feat.columns:
+                    interaction_features_to_add_dict[f'{area_bin_col}_x_hour_sin'] = data_feat[area_bin_col] * data_feat['hour_sin']
+        print(f"    Created interactions with area bins.")
+
+    if interaction_features_to_add_dict:
+        data_feat = pd.concat([data_feat] + [s.rename(name) for name, s in interaction_features_to_add_dict.items() if name not in data_feat.columns], axis=1)
     print(f"    Created various interaction features.")
     
     # --- Finalize Feature List & Clean up ---
@@ -380,6 +406,7 @@ def create_features(df_elec_single_building, df_weather_full, target_building_na
 
 if __name__ == '__main__':
     print("Testing xgboost_data_preparer.py (now in models/xgboost/)...")
+    # ... (Test block updated to check for temp_cubed) ...
     current_dir_test = os.path.dirname(os.path.abspath(__file__))
     project_root_test = os.path.dirname(os.path.dirname(current_dir_test)) 
     test_cache_dir = os.path.join(project_root_test, "results", "xgboost_results", "feature_cache_test") 
@@ -406,20 +433,22 @@ if __name__ == '__main__':
                 print(f"\nTotal features for {test_bldg} (no cache): {len(feature_list_nocache)}")
 
                 print("\nChecking for new temperature-based and interaction features:")
-                temp_eng_features = ['hdd', 'cdd', 'air_temperature_sq', 'air_temperature_x_is_weekend', 'air_temperature_x_season_Winter'] 
+                temp_eng_features_to_check = ['hdd', 'cdd'] 
                 
-                actual_temp_col = None
+                actual_temp_col_test = None
                 possible_temp_cols_test = ['Temperature', 'temp', 'air_temp', 'temperature', 'Air temperature', 'T', 'tt']
+                
+                # Check in df_weather_full (which is 'weather_df' in this test block)
                 for p_name in possible_temp_cols_test:
-                    if p_name in features_df_nocache.columns: actual_temp_col = p_name; break
-                    elif p_name.lower() in (c.lower() for c in features_df_nocache.columns): 
-                        actual_temp_col = next(c for c in features_df_nocache.columns if c.lower() == p_name.lower())
+                    if p_name in weather_df.columns: actual_temp_col_test = p_name; break 
+                    elif p_name.lower() in (c.lower() for c in weather_df.columns): 
+                        actual_temp_col_test = next(c for c in weather_df.columns if c.lower() == p_name.lower())
                         break
                 
-                if actual_temp_col:
-                    temp_eng_features = ['hdd', 'cdd', f'{actual_temp_col}_sq', f'{actual_temp_col}_x_is_weekend', f'{actual_temp_col}_x_season_Winter']
+                if actual_temp_col_test:
+                    temp_eng_features_to_check.extend([f'{actual_temp_col_test}_sq', f'{actual_temp_col_test}_cubed', f'{actual_temp_col_test}_x_is_weekend', f'{actual_temp_col_test}_x_season_Winter'])
 
-                for new_feat in temp_eng_features:
+                for new_feat in temp_eng_features_to_check:
                     if new_feat in feature_list_nocache:
                         print(f"  Found new feature: {new_feat}")
                     else:

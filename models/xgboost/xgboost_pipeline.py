@@ -4,7 +4,7 @@ import os
 import json 
 
 # Import from sibling modules
-from .xgboost_data_preparer import prepare_data, create_features # create_features is now imported here
+from .xgboost_data_preparer import prepare_data, create_features 
 from .xgboost_trainer import run_cross_validation_fold 
 from .xgboost_evaluator import plot_overall_xgboost_results, save_summary_stats
 
@@ -24,11 +24,11 @@ XGBOOST_IMPORTANCE_PLOTS_DIR = os.path.join(XGBOOST_PLOTS_BASE_DIR, "feature_imp
 XGBOOST_CORRELATION_DATA_DIR = os.path.join(XGBOOST_DATA_DIR, "correlations") 
 XGBOOST_IMPORTANCE_DATA_DIR = os.path.join(XGBOOST_DATA_DIR, "feature_importance") 
 XGBOOST_PREDICTIONS_DATA_DIR = os.path.join(XGBOOST_DATA_DIR, "predictions") 
-
 XGBOOST_TENSORBOARD_LOGS_DIR = os.path.join(XGBOOST_RESULTS_DIR, "tensorboard_logs")
-
-# --- NEW: Feature Cache Directory ---
 XGBOOST_FEATURE_CACHE_DIR = os.path.join(XGBOOST_RESULTS_DIR, "feature_cache")
+
+# --- NEW: Directory for Trained Models ---
+XGBOOST_TRAINED_MODELS_DIR = os.path.join(XGBOOST_DATA_DIR, "trained_models")
 # --- END NEW ---
 
 
@@ -39,8 +39,8 @@ def ensure_all_output_dirs():
         XGBOOST_FEATURE_TARGET_CORRELATION_PLOTS_DIR, XGBOOST_PREDICTION_PLOTS_DIR,
         XGBOOST_IMPORTANCE_PLOTS_DIR, XGBOOST_DATA_DIR, XGBOOST_CORRELATION_DATA_DIR,
         XGBOOST_IMPORTANCE_DATA_DIR, XGBOOST_PREDICTIONS_DATA_DIR,
-        XGBOOST_TENSORBOARD_LOGS_DIR,
-        XGBOOST_FEATURE_CACHE_DIR # Add Feature Cache dir
+        XGBOOST_TENSORBOARD_LOGS_DIR, XGBOOST_FEATURE_CACHE_DIR,
+        XGBOOST_TRAINED_MODELS_DIR # Add trained models dir
     ]
     for d in dirs_to_create:
         os.makedirs(d, exist_ok=True)
@@ -62,7 +62,8 @@ def main():
         'importance_data_dir': XGBOOST_IMPORTANCE_DATA_DIR,
         'predictions_data_dir': XGBOOST_PREDICTIONS_DATA_DIR,
         'tensorboard_logs_dir': XGBOOST_TENSORBOARD_LOGS_DIR,
-        'feature_cache_dir': XGBOOST_FEATURE_CACHE_DIR # Add to output_paths
+        'feature_cache_dir': XGBOOST_FEATURE_CACHE_DIR,
+        'trained_models_dir': XGBOOST_TRAINED_MODELS_DIR # Add to output_paths
     }
 
     try:

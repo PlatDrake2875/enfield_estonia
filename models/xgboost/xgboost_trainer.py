@@ -6,10 +6,11 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_percentage_error
 import matplotlib
-matplotlib.use('Agg') # <<< ADD THIS LINE AT THE VERY TOP
+matplotlib.use('Agg') 
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import math # Was missing from previous version, needed for math.ceil/sqrt
 
 # Import from sibling module
 from .xgboost_data_preparer import create_features 
@@ -24,7 +25,6 @@ except ImportError:
 FIGURE_DPI = 300 
 
 def hackathon_split(data_with_features, target_building_col, train_months=2):
-    # ... (rest of the function remains the same) ...
     print(f"Splitting data for {target_building_col} (hackathon setup)...")
     data_with_features = data_with_features.sort_index()
     
@@ -53,7 +53,6 @@ def run_cross_validation_fold(
     area_map,
     output_paths 
     ):
-    # ... (rest of the function remains the same, including create_features calls) ...
     print(f"\n--- Processing with {held_out_building_name} as the held-out (new) building ---")
     
     train_building_names = [b for b in building_names if b != held_out_building_name]
@@ -185,7 +184,7 @@ def run_cross_validation_fold(
         'objective': 'reg:squarederror', 
         'eval_metric': 'rmse', 
         'eta': 0.03, 
-        'max_depth': 7,
+        'max_depth': math.floor(math.sqrt(X_train_final.shape[1])) if X_train_final.shape[1] > 0 else 5, # Dynamic max_depth
         'subsample': 0.8,
         'colsample_bytree': 0.8,
         'seed': 42,
@@ -196,11 +195,11 @@ def run_cross_validation_fold(
     
     training_callbacks = []
     if TENSORBOARD_AVAILABLE and 'tensorboard_logs_dir' in output_paths: 
-        safe_building_name = "".join(c if c.isalnum() else "_" for c in held_out_building_name)
-        log_dir = os.path.join(output_paths['tensorboard_logs_dir'], f"fold_{safe_building_name}")
+        safe_building_name_tb = "".join(c if c.isalnum() else "_" for c in held_out_building_name) # Ensure unique name for TB
+        log_dir = os.path.join(output_paths['tensorboard_logs_dir'], f"fold_{safe_building_name_tb}")
         os.makedirs(log_dir, exist_ok=True) 
         
-        tensorboard_callback = TensorBoard(log_dir=log_dir, name=f"XGBoost_{safe_building_name}")
+        tensorboard_callback = TensorBoard(log_dir=log_dir, name=f"XGBoost_{safe_building_name_tb}")
         training_callbacks.append(tensorboard_callback)
         print(f"    TensorBoard logging enabled. Logs will be saved to: {log_dir}")
     
@@ -215,6 +214,16 @@ def run_cross_validation_fold(
         callbacks=training_callbacks 
     )
     
+    # --- SAVE THE TRAINED MODEL ---
+    sanitized_building_name_model = "".join(c if c.isalnum() else "_" for c in held_out_building_name)
+    model_filename = os.path.join(output_paths['trained_models_dir'], f"xgb_model_{sanitized_building_name_model}_fold.json")
+    try:
+        model_xgb.save_model(model_filename)
+        print(f"    Trained XGBoost model for fold '{held_out_building_name}' saved to {model_filename}")
+    except Exception as e_save:
+        print(f"    Error saving XGBoost model for fold '{held_out_building_name}': {e_save}")
+    # --- END SAVE MODEL ---
+
     predictions_xgb = model_xgb.predict(dtest_xgb)
     
     y_test_final_mape = y_test_final.copy()
@@ -250,7 +259,7 @@ def run_cross_validation_fold(
         'true': y_test_final.values,
         'pred': predictions_xgb,
         'dates': y_test_final.index,
-        'model': model_xgb, 
+        'model': model_xgb, # Storing the model object itself in results_cv
         'evals_result': evals_result_xgb, 
         'feature_names': final_common_features,
         'fold_importance_scores': fold_importance_scores 
