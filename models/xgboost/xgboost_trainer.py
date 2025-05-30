@@ -206,7 +206,7 @@ def run_cross_validation_fold(
     model_xgb = xgb.train(
         params_xgb,
         dtrain_xgb,
-        num_boost_round=1000, 
+        num_boost_round=400, 
         evals=[(dtrain_xgb, 'train'), (dval_xgb, 'eval')],
         evals_result=evals_result_xgb, 
         early_stopping_rounds=100, 
